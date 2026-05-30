@@ -856,6 +856,15 @@ function save() {
         fbRef.set({ workers: S.workers, projects: S.projects })
              .catch(e => console.error('Firebase save:', e));
     }
+    scheduleSheetsSync();
+}
+
+// Debounce: chờ 10 giây sau lần save cuối rồi mới sync lên Sheets
+let _sheetsSyncTimer = null;
+function scheduleSheetsSync() {
+    if (!getSheetsUrl()) return;
+    clearTimeout(_sheetsSyncTimer);
+    _sheetsSyncTimer = setTimeout(() => doSyncToSheets(true), 10000);
 }
 
 // ── Migration from v3/v4 ──────────────────────────────────
@@ -2729,7 +2738,7 @@ function mSheetsSync() {
 
     return `<div class="modal-title">📊 Google Sheets</div>
     <div style="background:#f0fdf4;border:1px solid #86efac;border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:12px;color:#166534;">
-        ✅ Đã kết nối · Tự động sync lúc <strong>19:00</strong> mỗi ngày
+        ✅ Đã kết nối · <strong>Tự động sync sau mỗi lần thay đổi</strong>
         ${last ? `<br>🕐 Lần cuối: <strong>${last}</strong>` : ''}
     </div>
     <div style="font-size:12px;color:var(--gray-500);margin-bottom:12px;">
