@@ -1119,6 +1119,9 @@ function removeWeeklyExtraWorker(projId, workerId, weekStart) {
     const p = proj(projId);
     if (!p) return;
     p.weeklyExtraWorkers = (p.weeklyExtraWorkers||[]).filter(e => !(e.weekStart===weekStart && e.workerId===workerId));
+    // Xóa dữ liệu chấm công của thợ ngoài trong tuần này để tổng trừ đúng
+    const wDays = weekDays(new Date(weekStart + 'T00:00:00')).map(d => toYMD(d));
+    p.extraWorkerDays = (p.extraWorkerDays||[]).filter(e => !(e.workerId===workerId && wDays.includes(e.date)));
     save(); renderAll();
 }
 function weekExtraCost(p, workerId, days) {
