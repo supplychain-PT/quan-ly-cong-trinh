@@ -1020,12 +1020,22 @@ function setAttVal(p, workerId, date, value) {
 
 function laborCost(p) {
     let t = 0;
+    // Lương thợ chính (từ attendance)
     projWorkers(p).forEach(w => {
         (p.attendance||[]).filter(a => (a.workerId||a.empId) === w.id).forEach(a => {
             t += recVal(a) * effectiveWage(w, a.date);
         });
     });
-    t += (p.extraWorkerDays||[]).reduce((s,e) => s + (e.amount||0), 0);
+    // Thợ ngoài: chỉ tính những ai còn trong weeklyExtraWorkers (đồng bộ với weekDailyExtras)
+    const extraSet = new Set((p.weeklyExtraWorkers||[]).map(e => e.workerId + '|' + e.weekStart));
+    (p.extraWorkerDays||[]).forEach(e => {
+        if (!e.workerId) { t += (e.amount||0); return; }
+        const d = new Date((e.date||'') + 'T00:00:00');
+        const sun = new Date(d); sun.setDate(d.getDate() - d.getDay());
+        const ws = toYMD(sun);
+        if (extraSet.has(e.workerId + '|' + ws)) t += (e.amount||0);
+    });
+    // Hỗ trợ thêm
     t += (p.workerSupport||[]).reduce((s,x) => s + (x.amount||0), 0);
     return t;
 }
