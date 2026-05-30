@@ -2681,6 +2681,12 @@ function buildSheetsPayload() {
         const rev = p.revenue || 0;
         const pnl = rev - tc;
 
+        // ── Chi tiết chi phí ──────────────────────────
+        const expTypeLabel = t => t==='material'?'Vật liệu': t==='contractor'?'Đội thi công': 'Chi phí khác';
+        const expRows = [...(p.expenses||[])].sort((a,b)=>a.date>b.date?1:-1).map((e,i) => [
+            i+1, e.date||'', expTypeLabel(e.type), e.desc||'', e.payer||'', fmt(e.amount||0), e.note||''
+        ]);
+
         const rows = [
             [`CÔNG TRÌNH: ${p.name||''}`, '', '', '', '', `Cập nhật: ${now}`],
             ['Địa chỉ:', p.address||'', '', 'Bắt đầu:', p.startDate||'', 'Trạng thái:', status],
@@ -2697,6 +2703,10 @@ function buildSheetsPayload() {
             ['Tổng chi phí',       fmt(tc)],
             ['Doanh thu',          fmt(rev)],
             ['Lợi nhuận',          fmt(pnl)],
+            [],
+            ['=== CHI TIẾT CHI PHÍ ==='],
+            ['STT','Ngày','Loại','Nội dung','Người chi','Số tiền (đ)','Ghi chú'],
+            ...expRows,
             [],
             ['=== CHI TIẾT CHẤM CÔNG ==='],
             attHeader,
