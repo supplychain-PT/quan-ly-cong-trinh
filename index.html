@@ -1119,6 +1119,9 @@ function removeWeeklyExtraWorker(projId, workerId, weekStart) {
     const p = proj(projId);
     if (!p) return;
     p.weeklyExtraWorkers = (p.weeklyExtraWorkers||[]).filter(e => !(e.weekStart===weekStart && e.workerId===workerId));
+    // Xóa luôn dữ liệu chấm công của thợ ngoài trong tuần này để tổng được trừ đúng
+    const days = weekDays(S.weekStart).map(d => toYMD(d));
+    p.extraWorkerDays = (p.extraWorkerDays||[]).filter(e => !(e.workerId===workerId && days.includes(e.date)));
     save(); renderAll();
 }
 function weekExtraCost(p, workerId, days) {
@@ -2970,8 +2973,13 @@ function askDeleteWorker(wid) {
     confirmCb = () => {
         S.workers = S.workers.filter(x=>x.id!==wid);
         S.projects.forEach(p => {
-            p.workerIds  = (p.workerIds||[]).filter(id=>id!==wid);
-            p.attendance = (p.attendance||[]).filter(a=>(a.workerId||a.empId)!==wid);
+            p.workerIds        = (p.workerIds||[]).filter(id=>id!==wid);
+            p.attendance       = (p.attendance||[]).filter(a=>(a.workerId||a.empId)!==wid);
+            p.extraWorkerDays  = (p.extraWorkerDays||[]).filter(e=>e.workerId!==wid);
+            p.weeklyExtraWorkers = (p.weeklyExtraWorkers||[]).filter(e=>e.workerId!==wid);
+            p.workerSupport    = (p.workerSupport||[]).filter(s=>s.workerId!==wid);
+            p.workerAdvances   = (p.workerAdvances||[]).filter(a=>a.workerId!==wid);
+            p.workerAbsentWeeks = (p.workerAbsentWeeks||[]).filter(a=>a.workerId!==wid);
         });
         save(); renderAll();
     };
