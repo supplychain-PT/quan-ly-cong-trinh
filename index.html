@@ -2973,8 +2973,13 @@ function askDeleteWorker(wid) {
     confirmCb = () => {
         S.workers = S.workers.filter(x=>x.id!==wid);
         S.projects.forEach(p => {
-            // Chỉ xóa khỏi roster, giữ nguyên toàn bộ dữ liệu lịch sử
-            p.workerIds = (p.workerIds||[]).filter(id=>id!==wid);
+            p.workerIds          = (p.workerIds||[]).filter(id=>id!==wid);
+            p.attendance         = (p.attendance||[]).filter(a=>(a.workerId||a.empId)!==wid);
+            p.extraWorkerDays    = (p.extraWorkerDays||[]).filter(e=>e.workerId!==wid);
+            p.weeklyExtraWorkers = (p.weeklyExtraWorkers||[]).filter(e=>e.workerId!==wid);
+            p.workerSupport      = (p.workerSupport||[]).filter(s=>s.workerId!==wid);
+            p.workerAdvances     = (p.workerAdvances||[]).filter(a=>a.workerId!==wid);
+            p.workerAbsentWeeks  = (p.workerAbsentWeeks||[]).filter(a=>a.workerId!==wid);
         });
         save(); renderAll();
     };
