@@ -1536,9 +1536,9 @@ function renderReportView() {
                             <tr><td style="padding-left:12px;">Nhân công</td><td>${fmtMoney(labor)}</td></tr>
                             <tr><td style="padding-left:24px;" class="fs12 c-gray">Đã trả</td><td class="c-green fs12">-${fmtMoney(paid)}</td></tr>
                             <tr><td style="padding-left:24px;" class="fs12 c-gray">Còn nợ</td><td class="${owed>0?'c-orange':'c-green'} fs12">${fmtMoney(owed)}</td></tr>
-                            <tr><td style="padding-left:12px;">Vật liệu</td><td>${fmtMoney(mat)}</td></tr>
-                            ${contractor?`<tr><td style="padding-left:12px;">Đội thi công</td><td>${fmtMoney(contractor)}</td></tr>`:''}
-                            <tr><td style="padding-left:12px;">Chi khác</td><td>${fmtMoney(other)}</td></tr>
+                            ${contractor?`<tr><td style="padding-left:12px;">Đội Thi Công</td><td>${fmtMoney(contractor)}</td></tr>`:''}
+                            <tr><td style="padding-left:12px;">CP Tại Công Trình</td><td>${fmtMoney(other)}</td></tr>
+                            <tr><td style="padding-left:12px;">Chi Vật Tư</td><td>${fmtMoney(mat)}</td></tr>
                         </tbody><tfoot><tr>
                             <td class="fw7">${profit>=0?'💰 Lãi':'📉 Lỗ'}</td>
                             <td class="${profit>=0?'c-green':'c-red'} fw7">${profit<0?'-':''}${fmtMoney(Math.abs(profit))}</td>
@@ -1844,13 +1844,13 @@ function renderPayments(p, wStart, weekTotal) {
 function renderExpenses(p) {
     const exps = [...(p.expenses||[])].sort((a,b)=>b.date>a.date?1:-1);
     const mc = materialCost(p), cc = contractorCost(p), oc = otherCost(p);
-    const expIcon = e => e.type==='material'?'🧱': e.type==='contractor'?'👷': '📦';
-    const expBg   = e => e.type==='material'?'#fef9c3': e.type==='contractor'?'#fce7f3': '#f0fdf4';
+    const expIcon = e => e.type==='contractor'?'👷': e.type==='other'?'🏗️': '🧱';
+    const expBg   = e => e.type==='contractor'?'#fce7f3': e.type==='other'?'#fff7ed': '#fef9c3';
     return `
     <div class="stats-grid">
-        <div class="stat-card"><div class="stat-label">Vật liệu</div><div class="stat-value neutral">${fmtMoney(mc)}</div></div>
-        <div class="stat-card"><div class="stat-label">Đội thi công</div><div class="stat-value neutral">${fmtMoney(cc)}</div></div>
-        <div class="stat-card"><div class="stat-label">Chi phí khác</div><div class="stat-value neutral">${fmtMoney(oc)}</div></div>
+        <div class="stat-card"><div class="stat-label">Đội Thi Công</div><div class="stat-value neutral">${fmtMoney(cc)}</div></div>
+        <div class="stat-card"><div class="stat-label">CP Tại Công Trình</div><div class="stat-value neutral">${fmtMoney(oc)}</div></div>
+        <div class="stat-card"><div class="stat-label">Chi Vật Tư</div><div class="stat-value neutral">${fmtMoney(mc)}</div></div>
         <div class="stat-card"><div class="stat-label">Tổng phát sinh</div><div class="stat-value negative">${fmtMoney(mc+cc+oc)}</div></div>
     </div>
     <div class="card" style="padding:0;">
@@ -1972,9 +1972,9 @@ function renderOverview(p) {
                 <tr><td style="padding-left:12px;">Nhân công</td><td>${fmtMoney(lc)}</td></tr>
                 <tr><td style="padding-left:24px;" class="fs12 c-gray">Đã trả thợ</td><td class="c-green fs12">-${fmtMoney(paid)}</td></tr>
                 <tr><td style="padding-left:24px;" class="fs12 c-gray">Còn nợ thợ</td><td class="${owed>0?'c-orange':'c-green'} fs12">${fmtMoney(owed)}</td></tr>
-                <tr><td style="padding-left:12px;">Vật liệu</td><td>${fmtMoney(mc)}</td></tr>
-                ${cc?`<tr><td style="padding-left:12px;">Đội thi công</td><td>${fmtMoney(cc)}</td></tr>`:''}
-                <tr><td style="padding-left:12px;">Chi phí khác</td><td>${fmtMoney(oc)}</td></tr>
+                ${cc?`<tr><td style="padding-left:12px;">Đội Thi Công</td><td>${fmtMoney(cc)}</td></tr>`:''}
+                <tr><td style="padding-left:12px;">CP Tại Công Trình</td><td>${fmtMoney(oc)}</td></tr>
+                <tr><td style="padding-left:12px;">Chi Vật Tư</td><td>${fmtMoney(mc)}</td></tr>
             </tbody>
             <tfoot><tr>
                 <td class="fw7" style="font-size:15px;">${pft>=0?'💰 Lợi nhuận':'📉 Lỗ'}</td>
@@ -2338,9 +2338,9 @@ function mAddExpense() {
     <div class="form-group">
         <label class="form-label">Loại chi phí</label>
         <select class="form-select" id="m-type">
-            <option value="material">🧱 Vật liệu / Mua hàng</option>
-            <option value="contractor">👷 Đội thi công</option>
-            <option value="other">📦 Chi phí khác (xăng, ăn, thiết bị...)</option>
+            <option value="contractor">👷 Đội Thi Công</option>
+            <option value="other">🏗️ CP Tại Công Trình</option>
+            <option value="material">🧱 Chi Vật Tư</option>
         </select>
     </div>
     <div class="form-group">
@@ -2403,9 +2403,9 @@ function mEditExpense(arg) {
     <div class="form-group">
         <label class="form-label">Loại chi phí</label>
         <select class="form-select" id="m-type">
-            <option value="material" ${e.type==='material'?'selected':''}>🧱 Vật liệu / Mua hàng</option>
-            <option value="contractor" ${e.type==='contractor'?'selected':''}>👷 Đội thi công</option>
-            <option value="other" ${e.type==='other'?'selected':''}>📦 Chi phí khác (xăng, ăn, thiết bị...)</option>
+            <option value="contractor" ${e.type==='contractor'?'selected':''}>👷 Đội Thi Công</option>
+            <option value="other" ${e.type==='other'?'selected':''}>🏗️ CP Tại Công Trình</option>
+            <option value="material" ${e.type==='material'?'selected':''}>🧱 Chi Vật Tư</option>
         </select>
     </div>
     <div class="form-group">
@@ -2682,7 +2682,7 @@ function buildSheetsPayload() {
         const pnl = rev - tc;
 
         // ── Chi tiết chi phí ──────────────────────────
-        const expTypeLabel = t => t==='material'?'Vật liệu': t==='contractor'?'Đội thi công': 'Chi phí khác';
+        const expTypeLabel = t => t==='contractor'?'Đội Thi Công': t==='other'?'CP Tại Công Trình': 'Chi Vật Tư';
         const expRows = [...(p.expenses||[])].sort((a,b)=>a.date>b.date?1:-1).map((e,i) => [
             i+1, e.date||'', expTypeLabel(e.type), e.desc||'', e.payer||'', fmt(e.amount||0), e.note||''
         ]);
@@ -2697,9 +2697,9 @@ function buildSheetsPayload() {
             [],
             ['=== TỔNG KẾT TÀI CHÍNH ==='],
             ['Chi phí nhân công',  fmt(lc)],
-            ['Chi phí vật liệu',   fmt(mc)],
-            ['Chi phí đội thi công', fmt(cc)],
-            ['Chi phí khác',        fmt(oc)],
+            ['Đội Thi Công',        fmt(cc)],
+            ['CP Tại Công Trình',   fmt(oc)],
+            ['Chi Vật Tư',          fmt(mc)],
             ['Tổng chi phí',       fmt(tc)],
             ['Doanh thu',          fmt(rev)],
             ['Lợi nhuận',          fmt(pnl)],
@@ -3112,7 +3112,7 @@ function exportProjectExcel() {
     // ── Sheet 2: CHI PHÍ ────────────────────────────────────
     const expRows = [['NGÀY', 'LOẠI', 'NỘI DUNG', 'SỐ TIỀN', 'GHI CHÚ']];
     (p.expenses || []).forEach(e => {
-        expRows.push([e.date, e.type==='material'?'Vật tư': e.type==='contractor'?'Đội thi công':'Khác', e.desc, e.amount, e.note||'']);
+        expRows.push([e.date, e.type==='contractor'?'Đội Thi Công': e.type==='other'?'CP Tại Công Trình':'Chi Vật Tư', e.desc, e.amount, e.note||'']);
     });
     const ws2 = XLSX.utils.aoa_to_sheet(expRows);
     ws2['!cols'] = [{wch:12},{wch:8},{wch:30},{wch:14},{wch:20}];
@@ -3141,9 +3141,9 @@ function exportProjectExcel() {
         [],
         ['CHI PHÍ', ''],
         ['Chi phí nhân công', lc],
-        ['Chi phí vật tư', mc],
-        ['Chi phí đội thi công', cc],
-        ['Chi phí khác', oc],
+        ['Đội Thi Công', cc],
+        ['CP Tại Công Trình', oc],
+        ['Chi Vật Tư', mc],
         ['TỔNG CHI PHÍ', tc],
         [],
         ['ĐÃ NHẬN TẠM ỨNG', adv],
