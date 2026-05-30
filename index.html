@@ -321,8 +321,9 @@
 
         /* ===== TAGS / BADGES ===== */
         .tag { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 20px; font-size: 11px; font-weight: 600; white-space: nowrap; }
-        .tag-material { background: #dbeafe; color: #1e40af; }
-        .tag-other    { background: var(--purple-light); color: #5b21b6; }
+        .tag-material   { background: #dbeafe; color: #1e40af; }
+        .tag-contractor { background: #fce7f3; color: #9d174d; }
+        .tag-other      { background: var(--purple-light); color: #5b21b6; }
         .tag-advance  { background: var(--success-light); color: var(--success); }
         .tag-current  { background: var(--success-light); color: var(--success); }
 
@@ -1020,9 +1021,10 @@ function laborCost(p) {
     return t;
 }
 
-function materialCost(p) { return (p.expenses||[]).filter(e=>e.type==='material').reduce((s,e)=>s+(e.amount||0),0); }
-function otherCost(p)    { return (p.expenses||[]).filter(e=>e.type==='other').reduce((s,e)=>s+(e.amount||0),0); }
-function totalCost(p)    { return laborCost(p) + materialCost(p) + otherCost(p); }
+function materialCost(p)    { return (p.expenses||[]).filter(e=>e.type==='material').reduce((s,e)=>s+(e.amount||0),0); }
+function contractorCost(p)  { return (p.expenses||[]).filter(e=>e.type==='contractor').reduce((s,e)=>s+(e.amount||0),0); }
+function otherCost(p)       { return (p.expenses||[]).filter(e=>e.type==='other').reduce((s,e)=>s+(e.amount||0),0); }
+function totalCost(p)       { return laborCost(p) + materialCost(p) + contractorCost(p) + otherCost(p); }
 function totalAdvances(p){ return (p.advances||[]).reduce((s,x)=>s+(x.amount||0),0); }
 function totalPaid(p)    { return (p.payments||[]).reduce((s,x)=>s+(x.amount||0),0); }
 
@@ -1449,8 +1451,9 @@ function renderReportView() {
     }
     function calcProj(p) {
         const adv   = (p.advances||[]).filter(a=>inRange(a.date)).reduce((s,a)=>s+(a.amount||0),0);
-        const mat   = (p.expenses||[]).filter(e=>e.type==='material'&&inRange(e.date)).reduce((s,e)=>s+(e.amount||0),0);
-        const other = (p.expenses||[]).filter(e=>e.type==='other'&&inRange(e.date)).reduce((s,e)=>s+(e.amount||0),0);
+        const mat        = (p.expenses||[]).filter(e=>e.type==='material'&&inRange(e.date)).reduce((s,e)=>s+(e.amount||0),0);
+        const contractor = (p.expenses||[]).filter(e=>e.type==='contractor'&&inRange(e.date)).reduce((s,e)=>s+(e.amount||0),0);
+        const other      = (p.expenses||[]).filter(e=>e.type==='other'&&inRange(e.date)).reduce((s,e)=>s+(e.amount||0),0);
         const workers = projWorkers(p);
         const wRows = workers.map(w => {
             const days = (p.attendance||[]).filter(a=>(a.workerId||a.empId)===w.id&&inRange(a.date));
@@ -1462,13 +1465,13 @@ function renderReportView() {
         const labor = wRows.reduce((s,r)=>s+r.amt,0)
             + (p.extraWorkerDays||[]).filter(e=>inRange(e.date)).reduce((s,e)=>s+(e.amount||0),0);
         const paid  = (p.payments||[]).filter(x=>inRange(x.date)).reduce((s,x)=>s+(x.amount||0),0);
-        const total = labor + mat + other;
+        const total = labor + mat + contractor + other;
         const profit = adv - total;
-        return { adv, mat, other, labor, total, profit, paid, wRows };
+        return { adv, mat, contractor, other, labor, total, profit, paid, wRows };
     }
 
-    let gAdv=0,gLabor=0,gMat=0,gOther=0,gProfit=0;
-    const calcs = projs.map(p => { const c=calcProj(p); gAdv+=c.adv; gLabor+=c.labor; gMat+=c.mat; gOther+=c.other; gProfit+=c.profit; return {p,...c}; });
+    let gAdv=0,gLabor=0,gMat=0,gContractor=0,gOther=0,gProfit=0;
+    const calcs = projs.map(p => { const c=calcProj(p); gAdv+=c.adv; gLabor+=c.labor; gMat+=c.mat; gContractor+=c.contractor; gOther+=c.other; gProfit+=c.profit; return {p,...c}; });
 
     const filterBar = `<div class="card" style="margin-bottom:14px;">
         <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
@@ -1485,12 +1488,12 @@ function renderReportView() {
 
     const grandStats = `<div class="stats-grid" style="margin-bottom:14px;">
         <div class="stat-card"><div class="stat-label">Tổng tạm ứng</div><div class="stat-value positive">${fmtMoney(gAdv)}</div></div>
-        <div class="stat-card"><div class="stat-label">Tổng chi phí</div><div class="stat-value negative">${fmtMoney(gLabor+gMat+gOther)}</div></div>
+        <div class="stat-card"><div class="stat-label">Tổng chi phí</div><div class="stat-value negative">${fmtMoney(gLabor+gMat+gContractor+gOther)}</div></div>
         <div class="stat-card"><div class="stat-label">${gProfit>=0?'💰 Lợi nhuận':'📉 Lỗ'}</div>
             <div class="stat-value ${gProfit>=0?'positive':'negative'}">${gProfit<0?'-':''}${fmtMoney(Math.abs(gProfit))}</div></div>
     </div>`;
 
-    const projCards = calcs.map(({p, adv, mat, other, labor, total, profit, paid, wRows}) => {
+    const projCards = calcs.map(({p, adv, mat, contractor, other, labor, total, profit, paid, wRows}) => {
         const owed = Math.max(0, labor - paid);
         const rev  = p.revenue || 0;
         const pid  = 'rc-' + p.id;
@@ -1525,6 +1528,7 @@ function renderReportView() {
                             <tr><td style="padding-left:24px;" class="fs12 c-gray">Đã trả</td><td class="c-green fs12">-${fmtMoney(paid)}</td></tr>
                             <tr><td style="padding-left:24px;" class="fs12 c-gray">Còn nợ</td><td class="${owed>0?'c-orange':'c-green'} fs12">${fmtMoney(owed)}</td></tr>
                             <tr><td style="padding-left:12px;">Vật liệu</td><td>${fmtMoney(mat)}</td></tr>
+                            ${contractor?`<tr><td style="padding-left:12px;">Đội thi công</td><td>${fmtMoney(contractor)}</td></tr>`:''}
                             <tr><td style="padding-left:12px;">Chi khác</td><td>${fmtMoney(other)}</td></tr>
                         </tbody><tfoot><tr>
                             <td class="fw7">${profit>=0?'💰 Lãi':'📉 Lỗ'}</td>
@@ -1830,13 +1834,15 @@ function renderPayments(p, wStart, weekTotal) {
 // ── EXPENSES ──────────────────────────────────────────────
 function renderExpenses(p) {
     const exps = [...(p.expenses||[])].sort((a,b)=>b.date>a.date?1:-1);
-    const mc = materialCost(p), oc = otherCost(p);
-    const isMat = e => e.type === 'material';
+    const mc = materialCost(p), cc = contractorCost(p), oc = otherCost(p);
+    const expIcon = e => e.type==='material'?'🧱': e.type==='contractor'?'👷': '📦';
+    const expBg   = e => e.type==='material'?'#fef9c3': e.type==='contractor'?'#fce7f3': '#f0fdf4';
     return `
     <div class="stats-grid">
         <div class="stat-card"><div class="stat-label">Vật liệu</div><div class="stat-value neutral">${fmtMoney(mc)}</div></div>
+        <div class="stat-card"><div class="stat-label">Đội thi công</div><div class="stat-value neutral">${fmtMoney(cc)}</div></div>
         <div class="stat-card"><div class="stat-label">Chi phí khác</div><div class="stat-value neutral">${fmtMoney(oc)}</div></div>
-        <div class="stat-card"><div class="stat-label">Tổng phát sinh</div><div class="stat-value negative">${fmtMoney(mc+oc)}</div></div>
+        <div class="stat-card"><div class="stat-label">Tổng phát sinh</div><div class="stat-value negative">${fmtMoney(mc+cc+oc)}</div></div>
     </div>
     <div class="card" style="padding:0;">
         <div class="card-header" style="padding:10px 14px;">
@@ -1851,8 +1857,8 @@ function renderExpenses(p) {
                     border-bottom:1px solid var(--gray-100);">
             <!-- icon loại -->
             <div style="width:36px;height:36px;border-radius:10px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:17px;
-                        background:${isMat(e)?'#fef9c3':'#f0fdf4'};">
-                ${isMat(e)?'🧱':'📦'}
+                        background:${expBg(e)};">
+                ${expIcon(e)}
             </div>
             <!-- nội dung -->
             <div style="flex:1;min-width:0;">
@@ -1915,8 +1921,8 @@ function renderAdvances(p) {
 
 // ── OVERVIEW ──────────────────────────────────────────────
 function renderOverview(p) {
-    const lc  = laborCost(p), mc = materialCost(p), oc = otherCost(p);
-    const tc  = lc + mc + oc;
+    const lc  = laborCost(p), mc = materialCost(p), cc = contractorCost(p), oc = otherCost(p);
+    const tc  = lc + mc + cc + oc;
     const adv = totalAdvances(p);
     const rev = p.revenue || 0;
     const pft = adv - tc;
@@ -1958,6 +1964,7 @@ function renderOverview(p) {
                 <tr><td style="padding-left:24px;" class="fs12 c-gray">Đã trả thợ</td><td class="c-green fs12">-${fmtMoney(paid)}</td></tr>
                 <tr><td style="padding-left:24px;" class="fs12 c-gray">Còn nợ thợ</td><td class="${owed>0?'c-orange':'c-green'} fs12">${fmtMoney(owed)}</td></tr>
                 <tr><td style="padding-left:12px;">Vật liệu</td><td>${fmtMoney(mc)}</td></tr>
+                ${cc?`<tr><td style="padding-left:12px;">Đội thi công</td><td>${fmtMoney(cc)}</td></tr>`:''}
                 <tr><td style="padding-left:12px;">Chi phí khác</td><td>${fmtMoney(oc)}</td></tr>
             </tbody>
             <tfoot><tr>
@@ -2323,6 +2330,7 @@ function mAddExpense() {
         <label class="form-label">Loại chi phí</label>
         <select class="form-select" id="m-type">
             <option value="material">🧱 Vật liệu / Mua hàng</option>
+            <option value="contractor">👷 Đội thi công</option>
             <option value="other">📦 Chi phí khác (xăng, ăn, thiết bị...)</option>
         </select>
     </div>
@@ -2387,6 +2395,7 @@ function mEditExpense(arg) {
         <label class="form-label">Loại chi phí</label>
         <select class="form-select" id="m-type">
             <option value="material" ${e.type==='material'?'selected':''}>🧱 Vật liệu / Mua hàng</option>
+            <option value="contractor" ${e.type==='contractor'?'selected':''}>👷 Đội thi công</option>
             <option value="other" ${e.type==='other'?'selected':''}>📦 Chi phí khác (xăng, ăn, thiết bị...)</option>
         </select>
     </div>
@@ -2657,8 +2666,9 @@ function buildSheetsPayload() {
         // ── Tổng kết tài chính ───────────────────────
         const lc  = laborCost(p);
         const mc  = materialCost(p);
+        const cc  = contractorCost(p);
         const oc  = otherCost(p);
-        const tc  = lc + mc + oc;
+        const tc  = lc + mc + cc + oc;
         const rev = p.revenue || 0;
         const pnl = rev - tc;
 
@@ -2671,9 +2681,10 @@ function buildSheetsPayload() {
             ...workerRows,
             [],
             ['=== TỔNG KẾT TÀI CHÍNH ==='],
-            ['Chi phí nhân công', fmt(lc)],
-            ['Chi phí vật liệu',  fmt(mc)],
-            ['Chi phí khác',       fmt(oc)],
+            ['Chi phí nhân công',  fmt(lc)],
+            ['Chi phí vật liệu',   fmt(mc)],
+            ['Chi phí đội thi công', fmt(cc)],
+            ['Chi phí khác',        fmt(oc)],
             ['Tổng chi phí',       fmt(tc)],
             ['Doanh thu',          fmt(rev)],
             ['Lợi nhuận',          fmt(pnl)],
@@ -3082,7 +3093,7 @@ function exportProjectExcel() {
     // ── Sheet 2: CHI PHÍ ────────────────────────────────────
     const expRows = [['NGÀY', 'LOẠI', 'NỘI DUNG', 'SỐ TIỀN', 'GHI CHÚ']];
     (p.expenses || []).forEach(e => {
-        expRows.push([e.date, e.type==='material'?'Vật tư':'Khác', e.desc, e.amount, e.note||'']);
+        expRows.push([e.date, e.type==='material'?'Vật tư': e.type==='contractor'?'Đội thi công':'Khác', e.desc, e.amount, e.note||'']);
     });
     const ws2 = XLSX.utils.aoa_to_sheet(expRows);
     ws2['!cols'] = [{wch:12},{wch:8},{wch:30},{wch:14},{wch:20}];
@@ -3098,8 +3109,8 @@ function exportProjectExcel() {
     XLSX.utils.book_append_sheet(wb, ws3, 'Tạm Ứng');
 
     // ── Sheet 4: TỔNG QUAN ──────────────────────────────────
-    const lc = laborCost(p), mc = materialCost(p), oc = otherCost(p);
-    const tc = lc + mc + oc;
+    const lc = laborCost(p), mc = materialCost(p), cc = contractorCost(p), oc = otherCost(p);
+    const tc = lc + mc + cc + oc;
     const adv = totalAdvances(p);
     const ovRows = [
         ['TỔNG QUAN CÔNG TRÌNH'],
@@ -3112,6 +3123,7 @@ function exportProjectExcel() {
         ['CHI PHÍ', ''],
         ['Chi phí nhân công', lc],
         ['Chi phí vật tư', mc],
+        ['Chi phí đội thi công', cc],
         ['Chi phí khác', oc],
         ['TỔNG CHI PHÍ', tc],
         [],
