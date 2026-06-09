@@ -2028,7 +2028,7 @@ function renderOverview(p) {
 //  MODALS
 // ══════════════════════════════════════════════════════════
 function openModal(type, extra) {
-    modalType = type; modalExtra = extra;
+    modalType = type; if (extra !== undefined) modalExtra = extra;
     document.getElementById('modal-content').innerHTML = modalContent();
     document.getElementById('modal-overlay').style.display = 'flex';
     const first = document.querySelector('#modal-content input, #modal-content select');
