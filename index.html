@@ -2886,7 +2886,7 @@ function mSheetsSync() {
 // Code Google Apps Script để user copy vào script.google.com
 function getGASCode() {
 return `// ════════════════════════════════════════════════════
-// Quản lý Công Trình – Google Sheets Sync
+// Quản lý Công Trình – Google Sheets Sync  v2
 // 1. Vào script.google.com → New project → dán code này
 // 2. Deploy → New deployment → Web app
 //    Execute as: Me | Who has access: Anyone
@@ -2934,63 +2934,208 @@ function syncSheets(data) {
   });
 }
 
+// Bảng màu
+var CLR = {
+  navyBg:'#1e3a5f', navyFg:'#ffffff',
+  secBg:'#1d4ed8',  secFg:'#ffffff',
+  wkBg:'#dbeafe',   wkFg:'#1e40af',
+  colHdrBg:'#475569', colHdrFg:'#ffffff',
+  totBg:'#fef08a',  totFg:'#78350f',  totBdr:'#f59e0b',
+  extBg:'#fff7ed',  extFg:'#92400e',  extBdr:'#fed7aa',
+  profBg:'#dcfce7', profFg:'#166534',
+  sumBg:'#e8edf2',
+  infoBg:'#eef2f7', infoFg:'#4b5563',
+  alt:'#f1f5f9',
+  bdr:'#cbd5e1', bdrMed:'#64748b'
+};
+
 function writeSheet(sh, sd) {
   sh.clearContents();
   sh.clearFormats();
-  const rows = sd.rows || [];
+  var rows = sd.rows || [];
   if (!rows.length) return;
 
-  const maxCols = Math.max(...rows.map(r => Array.isArray(r) ? r.length : 1), 1);
-  const norm = rows.map(r => {
+  var maxCols = Math.max.apply(null, rows.map(function(r){ return Array.isArray(r) ? r.length : 1; }).concat([1]));
+  var norm = rows.map(function(r){
     if (!Array.isArray(r)) r = [String(r)];
     while (r.length < maxCols) r.push('');
-    return r.map(v => v === null || v === undefined ? '' : v);
+    return r.map(function(v){ return (v === null || v === undefined) ? '' : v; });
   });
 
-  sh.getRange(1, 1, norm.length, maxCols).setValues(norm);
+  // 1. Ghi toan bo du lieu
+  sh.getRange(1, 1, norm.length, maxCols)
+    .setValues(norm)
+    .setFontFamily('Arial')
+    .setFontSize(10)
+    .setVerticalAlignment('middle');
 
-  // Format từng dòng
-  rows.forEach((row, i) => {
-    const rn = i + 1;
-    const cell0 = String(Array.isArray(row) ? (row[0]||'') : row || '');
-    const nc = Math.max(Array.isArray(row) ? row.length : 1, maxCols);
-    const rng = sh.getRange(rn, 1, 1, nc);
+  var isProj = sd.type === 'project';
+  var altRow  = false;
+  var BS      = SpreadsheetApp.BorderStyle;
 
+  // 2. Format tung hang
+  rows.forEach(function(row, i){
+    var rn   = i + 1;
+    var c0   = String(Array.isArray(row) ? (row[0] || '') : (row || ''));
+    var isEmpty = !Array.isArray(row) || row.every(function(v){ return !v && v !== 0; });
+    if (isEmpty) { sh.setRowHeight(rn, 6); return; }
+
+    var all  = sh.getRange(rn, 1, 1, maxCols);
+    var col1 = sh.getRange(rn, 1);
+    var colN = sh.getRange(rn, maxCols);
+
+    // Hang 1: Tieu de sheet
     if (rn === 1) {
-      rng.setBackground('#1e3a5f').setFontColor('#ffffff').setFontWeight('bold').setFontSize(12);
-    } else if (rn === 2 && (sd.type === 'workers' || sd.type === 'report')) {
-      rng.setBackground('#2d6a9f').setFontColor('#ffffff').setFontWeight('bold');
-    } else if (['TỔNG QUAN TÀI CHÍNH','CHẤM CÔNG THEO TUẦN','CHI PHÍ CHI TIẾT','TẠM ỨNG CHỦ NHÀ'].includes(cell0)) {
-      rng.setBackground('#1d4ed8').setFontColor('#ffffff').setFontWeight('bold').setFontSize(11);
-    } else if (cell0.startsWith('Tuần:')) {
-      rng.setBackground('#dbeafe').setFontColor('#1e40af').setFontWeight('bold');
-    } else if (cell0 === 'Tên thợ' || cell0 === 'STT') {
-      rng.setBackground('#e2e8f0').setFontWeight('bold');
-    } else if (cell0 === 'TỔNG TUẦN') {
-      rng.setBackground('#fef9c3').setFontWeight('bold').setFontSize(11);
-    } else if (['Tổng chi phí','Tổng tạm ứng'].includes(cell0)) {
-      rng.setBackground('#f1f5f9').setFontWeight('bold');
-    } else if (cell0.startsWith('Lợi nhuận') || cell0.startsWith('Chênh lệch')) {
-      rng.setBackground('#dcfce7').setFontWeight('bold');
+      all.merge()
+         .setBackground(CLR.navyBg).setFontColor(CLR.navyFg)
+         .setFontWeight('bold').setFontSize(isProj ? 14 : 13)
+         .setHorizontalAlignment('center');
+      all.setBorder(true,true,true,true,false,false,'#0f172a',BS.SOLID_MEDIUM);
+      sh.setRowHeight(rn, isProj ? 44 : 38);
+      return;
     }
 
-    // Format tiền (số > 1000 ở cột từ 2 trở đi)
+    // Hang 2: Info (project) hoac Header cot (workers/report)
+    if (rn === 2) {
+      if (isProj) {
+        all.setBackground(CLR.infoBg).setFontColor(CLR.infoFg).setFontStyle('italic');
+        all.setBorder(true,true,true,true,true,false,CLR.bdr,BS.SOLID);
+        sh.setRowHeight(rn, 22);
+      } else {
+        all.setBackground(CLR.colHdrBg).setFontColor(CLR.colHdrFg)
+           .setFontWeight('bold').setHorizontalAlignment('center').setWrap(true);
+        all.setBorder(true,true,true,true,true,false,CLR.bdrMed,BS.SOLID);
+        sh.setRowHeight(rn, 34);
+      }
+      return;
+    }
+
+    // Section headers
+    var secOrig = ['TỔNG QUAN TÀI CHÍNH','CHẤM CÔNG THEO TUẦN','CHI PHÍ CHI TIẾT','TẠM ỨNG CHỦ NHÀ'];
+    if (secOrig.indexOf(c0) >= 0) {
+      all.merge()
+         .setBackground(CLR.secBg).setFontColor(CLR.secFg)
+         .setFontWeight('bold').setFontSize(11).setHorizontalAlignment('left');
+      all.setBorder(true,true,true,true,false,false,'#1e40af',BS.SOLID_MEDIUM);
+      sh.setRowHeight(rn, 30);
+      altRow = false;
+      return;
+    }
+
+    // Tuan header
+    if (c0.indexOf('Tuần:') === 0) {
+      all.merge()
+         .setBackground(CLR.wkBg).setFontColor(CLR.wkFg)
+         .setFontWeight('bold').setFontSize(11).setHorizontalAlignment('center');
+      all.setBorder(true,true,true,true,false,false,'#93c5fd',BS.SOLID);
+      sh.setRowHeight(rn, 28);
+      altRow = false;
+      return;
+    }
+
+    // Ten tho (header bang cham cong)
+    if (c0 === 'Tên thợ') {
+      all.setBackground(CLR.colHdrBg).setFontColor(CLR.colHdrFg)
+         .setFontWeight('bold').setHorizontalAlignment('center').setWrap(true);
+      col1.setHorizontalAlignment('left');
+      all.setBorder(true,true,true,true,true,false,CLR.bdrMed,BS.SOLID);
+      sh.setRowHeight(rn, 38);
+      return;
+    }
+
+    // STT (header bang chi phi / tam ung)
+    if (c0 === 'STT') {
+      all.setBackground(CLR.colHdrBg).setFontColor(CLR.colHdrFg)
+         .setFontWeight('bold').setHorizontalAlignment('center');
+      all.setBorder(true,true,true,true,true,false,CLR.bdrMed,BS.SOLID);
+      sh.setRowHeight(rn, 28);
+      return;
+    }
+
+    // TONG TUAN
+    if (c0 === 'TỔNG TUẦN') {
+      if (maxCols > 1) {
+        sh.getRange(rn, 1, 1, maxCols - 1).merge()
+          .setBackground(CLR.totBg).setFontColor(CLR.totFg)
+          .setFontWeight('bold').setFontSize(11).setHorizontalAlignment('left')
+          .setBorder(true,true,true,true,false,false,CLR.totBdr,BS.SOLID_MEDIUM);
+      }
+      colN.setBackground(CLR.totBg).setFontColor(CLR.totFg)
+          .setFontWeight('bold').setFontSize(11)
+          .setNumberFormat('#,##0').setHorizontalAlignment('right')
+          .setBorder(true,true,true,true,false,false,CLR.totBdr,BS.SOLID_MEDIUM);
+      sh.setRowHeight(rn, 28);
+      return;
+    }
+
+    // Chi phi phat sinh (+)
+    if (isProj && c0.charAt(0) === '+') {
+      if (maxCols > 1) {
+        sh.getRange(rn, 1, 1, maxCols - 1).merge()
+          .setBackground(CLR.extBg).setFontColor(CLR.extFg)
+          .setFontStyle('italic').setHorizontalAlignment('left')
+          .setBorder(true,true,true,true,false,false,CLR.extBdr,BS.SOLID);
+      }
+      colN.setBackground(CLR.extBg).setFontColor(CLR.extFg)
+          .setFontWeight('bold').setFontStyle('normal')
+          .setNumberFormat('#,##0').setHorizontalAlignment('right')
+          .setBorder(true,true,true,true,false,false,CLR.extBdr,BS.SOLID);
+      sh.setRowHeight(rn, 22);
+      return;
+    }
+
+    // Tong chi phi / Tong tam ung
+    if (c0 === 'Tổng chi phí' || c0 === 'Tổng tạm ứng') {
+      all.setBackground(CLR.sumBg).setFontWeight('bold');
+      all.setBorder(true,true,true,true,true,false,CLR.bdrMed,BS.SOLID_MEDIUM);
+      sh.setRowHeight(rn, 24);
+    }
+    // Loi nhuan / Chenh lech
+    else if (c0.indexOf('Lợi nhuận') === 0 || c0.indexOf('Chênh lệch') === 0) {
+      all.setBackground(CLR.profBg).setFontColor(CLR.profFg).setFontWeight('bold');
+      all.setBorder(true,true,true,true,true,false,'#86efac',BS.SOLID);
+      sh.setRowHeight(rn, 24);
+    }
+    // Dong du lieu thuong
+    else {
+      all.setBackground(altRow ? CLR.alt : '#ffffff');
+      all.setBorder(true,true,true,true,true,false,CLR.bdr,BS.SOLID);
+      sh.setRowHeight(rn, 22);
+      altRow = !altRow;
+    }
+
+    // Format so + can phai
     if (Array.isArray(row)) {
-      row.forEach((v, j) => {
-        if (typeof v === 'number' && v >= 1000) {
-          sh.getRange(rn, j + 1).setNumberFormat('#,##0');
+      row.forEach(function(v, j){
+        if (typeof v === 'number') {
+          var cell = sh.getRange(rn, j + 1);
+          if (Math.abs(v) >= 1000) {
+            cell.setNumberFormat('#,##0').setHorizontalAlignment('right');
+          } else if (v >= 0 && v <= 10) {
+            cell.setHorizontalAlignment('center');
+          }
         }
       });
     }
   });
 
-  // Cột đầu rộng hơn cho tên
-  sh.setColumnWidth(1, 170);
-  sh.autoResizeColumns(2, maxCols - 1);
-  sh.setFrozenRows(1);
+  // 3. Do rong cot
+  sh.setColumnWidth(1, 185);
+  for (var c = 2; c <= maxCols; c++) {
+    try {
+      sh.autoResizeColumn(c);
+      var w = sh.getColumnWidth(c);
+      if (w < 52)  sh.setColumnWidth(c, 52);
+      if (w > 170) sh.setColumnWidth(c, 170);
+    } catch(e2){}
+  }
+
+  // 4. Co dinh hang + cot
+  sh.setFrozenRows(2);
+  if (isProj) sh.setFrozenColumns(1);
 }
 
-function testSync() { Logger.log('GAS OK – ' + new Date()); }`;
+function testSync() { Logger.log('GAS OK v2 – ' + new Date()); }`;
 }
 
 function doSavesSheetsUrl() {
