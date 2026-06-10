@@ -1047,6 +1047,8 @@ function laborCost(p) {
     });
     // Hỗ trợ thêm
     t += (p.workerSupport||[]).reduce((s,x) => s + (x.amount||0), 0);
+    // Chi phí phát sinh tuần (thay thế ghi nhận thanh toán)
+    t += (p.weekExtras||[]).reduce((s,x) => s + (x.amount||0), 0);
     return t;
 }
 
@@ -1054,8 +1056,11 @@ function materialCost(p)    { return (p.expenses||[]).filter(e=>e.type==='materi
 function contractorCost(p)  { return (p.expenses||[]).filter(e=>e.type==='contractor').reduce((s,e)=>s+(e.amount||0),0); }
 function otherCost(p)       { return (p.expenses||[]).filter(e=>e.type==='other').reduce((s,e)=>s+(e.amount||0),0); }
 function totalCost(p)       { return laborCost(p) + materialCost(p) + contractorCost(p) + otherCost(p); }
-function totalAdvances(p){ return (p.advances||[]).reduce((s,x)=>s+(x.amount||0),0); }
-function totalPaid(p)    { return (p.payments||[]).reduce((s,x)=>s+(x.amount||0),0); }
+function totalAdvances(p)   { return (p.advances||[]).reduce((s,x)=>s+(x.amount||0),0); }
+
+// Chi phí phát sinh tuần (cộng thêm vào lương)
+function getWeekExtras(p, weekStart) { return (p.weekExtras||[]).filter(e=>e.weekStart===weekStart); }
+function weekExtrasCost(p, weekStart){ return getWeekExtras(p,weekStart).reduce((s,e)=>s+(e.amount||0),0); }
 
 function workerLaborCost(p, w) {
     const attCost = (p.attendance||[]).filter(a=>(a.workerId||a.empId)===w.id)
@@ -1493,10 +1498,10 @@ function renderReportView() {
         }).filter(r=>r.nd>0||r.amt>0);
         const labor = wRows.reduce((s,r)=>s+r.amt,0)
             + (p.extraWorkerDays||[]).filter(e=>inRange(e.date)).reduce((s,e)=>s+(e.amount||0),0);
-        const paid  = (p.payments||[]).filter(x=>inRange(x.date)).reduce((s,x)=>s+(x.amount||0),0);
-        const total = labor + mat + contractor + other;
+        const extras = (p.weekExtras||[]).filter(e=>inRange(e.weekStart)).reduce((s,e)=>s+(e.amount||0),0);
+        const total = labor + extras + mat + contractor + other;
         const profit = adv - total;
-        return { adv, mat, contractor, other, labor, total, profit, paid, wRows };
+        return { adv, mat, contractor, other, labor, extras, total, profit, wRows };
     }
 
     let gAdv=0,gLabor=0,gMat=0,gContractor=0,gOther=0,gProfit=0;
@@ -1522,8 +1527,7 @@ function renderReportView() {
             <div class="stat-value ${gProfit>=0?'positive':'negative'}">${gProfit<0?'-':''}${fmtMoney(Math.abs(gProfit))}</div></div>
     </div>`;
 
-    const projCards = calcs.map(({p, adv, mat, contractor, other, labor, total, profit, paid, wRows}) => {
-        const owed = Math.max(0, labor - paid);
+    const projCards = calcs.map(({p, adv, mat, contractor, other, labor, extras, total, profit, wRows}) => {
         const rev  = p.revenue || 0;
         const pid  = 'rc-' + p.id;
         return `<div class="card" style="margin-bottom:8px;padding:0;overflow:hidden;">
@@ -1554,8 +1558,7 @@ function renderReportView() {
                             ${rev?`<tr><td style="padding-left:12px;font-size:11px;color:var(--gray-400);">Giá trị HĐ</td><td class="fs11 c-gray">${fmtMoney(rev)}</td></tr>`:''}
                             <tr><td style="color:var(--danger);font-weight:700;padding-top:8px;">CHI</td><td></td></tr>
                             <tr><td style="padding-left:12px;">Nhân công</td><td>${fmtMoney(labor)}</td></tr>
-                            <tr><td style="padding-left:24px;" class="fs12 c-gray">Đã trả</td><td class="c-green fs12">-${fmtMoney(paid)}</td></tr>
-                            <tr><td style="padding-left:24px;" class="fs12 c-gray">Còn nợ</td><td class="${owed>0?'c-orange':'c-green'} fs12">${fmtMoney(owed)}</td></tr>
+                            ${extras?`<tr><td style="padding-left:24px;" class="fs12 c-gray">Phát sinh</td><td class="fs12">${fmtMoney(extras)}</td></tr>`:''}
                             ${contractor?`<tr><td style="padding-left:12px;">Đội Thi Công</td><td>${fmtMoney(contractor)}</td></tr>`:''}
                             <tr><td style="padding-left:12px;">CP Tại Công Trình</td><td>${fmtMoney(other)}</td></tr>
                             <tr><td style="padding-left:12px;">Chi Vật Tư</td><td>${fmtMoney(mat)}</td></tr>
@@ -1678,7 +1681,8 @@ function renderAttendance(p) {
     const sunStr = toYMD(sunday);
     const weekWorkers = projWorkersForWeek(p, sunStr);
     const weekSupportTotal = weekWorkers.reduce((s,w)=>s+getWorkerSupport(p,w.id,sunStr),0);
-    const weekTotal = weekWorkers.reduce((s,w)=>s+weekLaborWorker(p,w,days),0) + extraTotal + weekSupportTotal;
+    const weekExtrasTotal  = weekExtrasCost(p, sunStr);
+    const weekTotal = weekWorkers.reduce((s,w)=>s+weekLaborWorker(p,w,days),0) + extraTotal + weekSupportTotal + weekExtrasTotal;
 
     return `
     <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px;flex-wrap:wrap;">
@@ -1836,35 +1840,28 @@ function renderAttendance(p) {
 
     <div class="card" style="margin-top:14px;">
         <div class="card-header">
-            <span class="card-title">💵 Thanh toán công tuần này</span>
-            ${p.status==='active'?`<button class="btn btn-success btn-sm" onclick="openModal('payment','${toYMD(sunday)}')">+ Ghi nhận</button>`:''}
+            <span class="card-title">💰 Chi phí phát sinh tuần</span>
+            ${p.status==='active'?`<button class="btn btn-primary btn-sm" onclick="openModal('add-week-extra','${sunStr}')">+ Thêm</button>`:''}
         </div>
-        ${renderPayments(p, toYMD(sunday), weekTotal)}
+        ${renderWeekExtras(p, sunStr)}
     </div>`;
 }
 
-function renderPayments(p, wStart, weekTotal) {
-    const pays    = (p.payments||[]).filter(x=>x.weekStart===wStart);
-    const paidSum = pays.reduce((s,x)=>s+x.amount,0);
-    const diff    = weekTotal - paidSum;
-
-    if (!pays.length) return `<div style="font-size:13px;color:var(--gray-400);">
-        Tuần này tính được <strong>${fmtMoney(weekTotal)}</strong>. Chưa ghi nhận thanh toán.
+function renderWeekExtras(p, weekStart) {
+    const extras = getWeekExtras(p, weekStart);
+    if (!extras.length) return `<div style="font-size:13px;color:var(--gray-400);padding:4px 0;">
+        Chưa có chi phí phát sinh. Chi phí này sẽ cộng thêm vào lương tổng tuần.
     </div>`;
-
-    return `
-    <div class="info-box ${diff>0?'yellow':'green'}" style="margin-bottom:8px;">
-        Tính được: <strong>${fmtMoney(weekTotal)}</strong> · Đã trả: <strong>${fmtMoney(paidSum)}</strong>
-        ${diff>0?` · Còn: <strong>${fmtMoney(diff)}</strong>`:'&nbsp;✅ Đủ rồi'}
-    </div>
-    ${pays.map(pay=>`<div class="pay-row">
-        <div style="flex:1;">
-            <span class="fw6 c-green">${fmtMoney(pay.amount)}</span>
-            <span class="c-gray fs12"> · ${fmtDate(pay.date)}</span>
-            ${pay.note?`<span class="c-gray fs12"> · ${esc(pay.note)}</span>`:''}
-        </div>
-        <button class="btn btn-ghost btn-xs" onclick="deletePayment('${p.id}','${pay.id}')">✕</button>
-    </div>`).join('')}`;
+    const total = extras.reduce((s,e)=>s+(e.amount||0),0);
+    return extras.map(e=>`
+    <div class="pay-row">
+        <div style="flex:1;font-size:13px;">${esc(e.note||'Chi phí khác')}</div>
+        <div style="font-weight:700;color:var(--danger);margin-right:6px;">${fmtMoney(e.amount)}</div>
+        ${p.status==='active'?`<button class="btn btn-ghost btn-xs" onclick="deleteWeekExtra('${p.id}','${e.id}')">✕</button>`:''}
+    </div>`).join('') +
+    `<div style="font-weight:700;text-align:right;padding-top:8px;font-size:13px;color:var(--primary);">
+        + ${fmtMoney(total)} cộng vào lương tuần
+    </div>`;
 }
 
 // ── EXPENSES ──────────────────────────────────────────────
@@ -1962,7 +1959,7 @@ function renderOverview(p) {
     const adv = totalAdvances(p);
     const rev = p.revenue || 0;
     const pft = adv - tc;
-    const paid = totalPaid(p), owed = Math.max(0, lc - paid);
+    const weekExtrasTotal = (p.weekExtras||[]).reduce((s,e)=>s+(e.amount||0),0);
     const pct  = adv > 0 ? (pft/adv*100).toFixed(1) : null;
     const workers = projWorkers(p);
 
@@ -1997,8 +1994,7 @@ function renderOverview(p) {
                 <tr><td style="padding-left:12px;">Tạm ứng từ chủ nhà</td><td class="c-green">${fmtMoney(adv)}</td></tr>
                 <tr><td style="color:var(--danger);font-weight:700;padding-top:10px;">CHI</td><td></td></tr>
                 <tr><td style="padding-left:12px;">Nhân công</td><td>${fmtMoney(lc)}</td></tr>
-                <tr><td style="padding-left:24px;" class="fs12 c-gray">Đã trả thợ</td><td class="c-green fs12">-${fmtMoney(paid)}</td></tr>
-                <tr><td style="padding-left:24px;" class="fs12 c-gray">Còn nợ thợ</td><td class="${owed>0?'c-orange':'c-green'} fs12">${fmtMoney(owed)}</td></tr>
+                ${weekExtrasTotal?`<tr><td style="padding-left:24px;" class="fs12 c-gray">Trong đó phát sinh</td><td class="fs12">${fmtMoney(weekExtrasTotal)}</td></tr>`:''}
                 ${cc?`<tr><td style="padding-left:12px;">Đội Thi Công</td><td>${fmtMoney(cc)}</td></tr>`:''}
                 <tr><td style="padding-left:12px;">CP Tại Công Trình</td><td>${fmtMoney(oc)}</td></tr>
                 <tr><td style="padding-left:12px;">Chi Vật Tư</td><td>${fmtMoney(mc)}</td></tr>
@@ -2063,7 +2059,7 @@ function modalContent() {
         case 'add-expense':    return mAddExpense();
         case 'edit-expense':   return mEditExpense(modalExtra);
         case 'add-advance':    return mAddAdvance();
-        case 'payment':        return mPayment();
+        case 'add-week-extra': return mAddWeekExtra();
         case 'set-revenue':    return mSetRevenue();
         case 'confirm':        return mConfirm();
         case 'add-weekly-extra': return mAddWeeklyExtra();
@@ -2512,38 +2508,38 @@ function doAddAdvance() {
     save(); closeModal(); renderAll();
 }
 
-function mPayment() {
-    const p = cur();
-    const sunday  = new Date(modalExtra + 'T00:00:00');
-    const days    = weekDays(sunday);
-    const workers = projWorkers(p);
-    const suggest = workers.reduce((s,w) => s + weekLaborWorker(p,w,days), 0);
-    return `<div class="modal-title">💵 Thanh toán công thợ</div>
-    <div class="info-box blue">Lương tuần này: <strong>${fmtMoney(suggest)}</strong> (${workers.length} thợ)</div>
+function mAddWeekExtra() {
+    const weekStart = modalExtra;
+    return `<div class="modal-title">💰 Chi phí phát sinh tuần</div>
+    <p style="font-size:13px;color:var(--gray-500);margin-bottom:12px;">Chi phí này sẽ cộng thêm vào lương tổng tuần (ví dụ: tiền xe, bữa ăn thợ, phụ cấp...)</p>
     <div class="form-group">
-        <label class="form-label">Ngày thanh toán</label>
-        <input type="date" class="form-input" id="m-date" value="${todayYMD()}">
+        <label class="form-label">Ghi chú *</label>
+        <input class="form-input" id="m-note" placeholder="VD: Tiền xe thồ, Bữa ăn thợ...">
     </div>
     <div class="form-group">
-        <label class="form-label">Số tiền đã trả (₫) *</label>
-        <input type="number" class="form-input" id="m-amount" value="${suggest}" min="0" inputmode="numeric">
-    </div>
-    <div class="form-group">
-        <label class="form-label">Ghi chú</label>
-        <input class="form-input" id="m-note" placeholder="Tiền mặt, chuyển khoản...">
+        <label class="form-label">Số tiền (₫) *</label>
+        <input type="number" class="form-input" id="m-amount" placeholder="100000" min="0" inputmode="numeric">
     </div>
     <div class="modal-footer">
         <button class="btn btn-outline" onclick="closeModal()">Hủy</button>
-        <button class="btn btn-success" onclick="doPayment()">✅ Ghi nhận</button>
+        <button class="btn btn-primary" onclick="doAddWeekExtra('${weekStart}')">✅ Thêm</button>
     </div>`;
 }
 
-function doPayment() {
+function doAddWeekExtra(weekStart) {
+    const note   = $v('m-note').trim();
     const amount = $f('m-amount');
     if (!amount) { alert('Nhập số tiền'); return; }
-    if (!cur().payments) cur().payments = [];
-    cur().payments.push({ id:uid(), weekStart:modalExtra, date:$v('m-date'), amount, note:$v('m-note').trim() });
+    const p = cur();
+    if (!p.weekExtras) p.weekExtras = [];
+    p.weekExtras.push({ id: uid(), weekStart, amount, note });
     save(); closeModal(); renderAll();
+}
+
+function deleteWeekExtra(projId, extraId) {
+    const p = proj(projId);
+    p.weekExtras = (p.weekExtras||[]).filter(e => e.id !== extraId);
+    save(); renderMain();
 }
 
 function mSetRevenue() {
