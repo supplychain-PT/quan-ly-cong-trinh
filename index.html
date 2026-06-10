@@ -3122,15 +3122,10 @@ function writeSheet(sh, sd) {
   b.blank.forEach(function(rn){ sh.setRowHeight(rn,6); });
   Object.keys(heights).forEach(function(rn){ sh.setRowHeight(parseInt(rn), heights[rn]); });
 
-  // 6. Column widths
+  // 6. Column widths (fixed - no autoResize to avoid timeout)
   sh.setColumnWidth(1, 185);
   for (var c = 2; c <= mc; c++) {
-    try {
-      sh.autoResizeColumn(c);
-      var w = sh.getColumnWidth(c);
-      if (w < 52) sh.setColumnWidth(c, 52);
-      if (w > 170) sh.setColumnWidth(c, 170);
-    } catch(e2){}
+    sh.setColumnWidth(c, c <= 8 ? 58 : 100);
   }
 
   // 7. Freeze
