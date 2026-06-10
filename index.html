@@ -1810,6 +1810,13 @@ function renderAttendance(p) {
         </tr></tfoot>
     </table>
     </div>
+    ${p.status==='active'?`
+    <div style="display:flex;gap:8px;margin-top:10px;">
+        <button id="att-save-btn" class="btn btn-success" style="flex:1;font-size:14px;font-weight:700;padding:10px;"
+            onclick="saveAttendance('${p.id}')">💾 Lưu</button>
+        <button class="btn btn-outline" style="color:var(--danger);border-color:var(--danger);font-size:13px;padding:10px 16px;white-space:nowrap;"
+            onclick="clearWeekAttendance('${p.id}')">🗑️ Xóa tuần</button>
+    </div>`:''}
     ${(()=>{
         const absentWorkers = projWorkers(p).filter(w => {
             if (w.leaveDate && w.leaveDate <= sunStr) return false; // nghỉ luôn → không hiển thị ở đây
@@ -3015,10 +3022,55 @@ function toggleAtt(projId, workerId, date) {
     const p = S.projects.find(x=>x.id===projId);
     if (!p || p.status !== 'active') return;
     setAttVal(p, workerId, date, cycleAttVal(getAttVal(p, workerId, date)));
-    save();
+    // Không tự động lưu — người dùng phải nhấn "Lưu"
     const scrollY   = window.scrollY;
     const wrap      = document.querySelector('.att-table-wrap');
     const scrollX   = wrap ? wrap.scrollLeft : 0;
+    const tc = document.getElementById('tab-content');
+    if (tc) tc.innerHTML = renderTab(p);
+    window.scrollTo(0, scrollY);
+    const newWrap = document.querySelector('.att-table-wrap');
+    if (newWrap) newWrap.scrollLeft = scrollX;
+}
+
+function saveAttendance(projId) {
+    save();
+    const btn = document.getElementById('att-save-btn');
+    if (btn) {
+        const orig = btn.innerHTML;
+        btn.innerHTML = '✅ Đã lưu!';
+        btn.style.background = 'var(--success)';
+        btn.disabled = true;
+        setTimeout(() => {
+            btn.innerHTML = orig;
+            btn.style.background = '';
+            btn.disabled = false;
+        }, 1500);
+    }
+}
+
+function clearWeekAttendance(projId) {
+    if (!confirm('Xóa hết dữ liệu chấm công tuần này?\n(Tên thợ vẫn giữ nguyên, chưa lưu cho đến khi bấm Lưu)')) return;
+    const p = proj(projId);
+    if (!p) return;
+    const wDays = weekDays(S.weekStart).map(d => toYMD(d));
+    const wIds  = new Set(p.workerIds || []);
+    // Xóa chấm công của thợ chính
+    p.attendance = (p.attendance||[]).filter(a => {
+        const wid = a.workerId || a.empId;
+        return wIds.has(wid) ? !wDays.includes(a.date) : true;
+    });
+    // Xóa chấm công của thợ ngoài tuần này
+    const sunStr = toYMD(S.weekStart);
+    const extraWids = new Set((p.weeklyExtraWorkers||[])
+        .filter(e => e.weekStart === sunStr).map(e => e.workerId));
+    p.extraWorkerDays = (p.extraWorkerDays||[]).filter(e => {
+        if (!e.workerId) return true;
+        return extraWids.has(e.workerId) ? !wDays.includes(e.date) : true;
+    });
+    const scrollY = window.scrollY;
+    const wrap = document.querySelector('.att-table-wrap');
+    const scrollX = wrap ? wrap.scrollLeft : 0;
     const tc = document.getElementById('tab-content');
     if (tc) tc.innerHTML = renderTab(p);
     window.scrollTo(0, scrollY);
