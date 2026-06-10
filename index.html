@@ -2684,81 +2684,159 @@ function updateSheetsBtn() {
 
 // Xây dữ liệu structured: mỗi công trình = 1 sheet với đầy đủ thông tin
 function buildSheetsPayload() {
-    const now = new Date().toLocaleString('vi-VN');
+    const now  = new Date().toLocaleString('vi-VN');
     const fmt  = n => Number((n||0).toFixed(0));
-    const vnd  = n => fmt(n).toLocaleString('vi-VN') + ' đ';
+    const df   = s => { if(!s)return''; const d=new Date(s+'T00:00:00'); return `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()}`; };
+    const dfs  = s => { if(!s)return''; const d=new Date(s+'T00:00:00'); return `${d.getDate()}/${d.getMonth()+1}`; };
+    const expLabel = t => t==='contractor'?'Đội Thi Công': t==='other'?'CP Tại Công Trình': 'Chi Vật Tư';
+    const blank7   = () => Array(7).fill('');
 
-    const sheets = S.projects.map(p => {
-        const ws     = projWorkers(p);
-        const att    = p.attendance || [];
-        const status = p.status === 'active' ? 'Đang thi công' : p.status === 'completed' ? 'Hoàn thành' : p.status || '';
+    // ── Sheet 1: Danh sách thợ ────────────────────────────
+    const workerSheet = {
+        name: 'Danh sách thợ', type: 'workers',
+        rows: [
+            [`DANH SÁCH THỢ · Cập nhật: ${now}`],
+            ['STT', 'Họ tên', 'Chức vụ / Vai trò', 'Lương/ngày (đ)'],
+            ...S.workers.map((w,i) => [i+1, w.name||'', w.role||'', fmt(w.wage||0)])
+        ]
+    };
 
-        // ── Tất cả ngày có chấm công ──────────────────
-        const allDates = [...new Set(att.map(a => a.date))].sort();
-
-        // ── Tính lương từng thợ ───────────────────────
-        const workerRows = ws.map((w, i) => {
-            const wAtt   = att.filter(a => (a.workerId||a.empId) === w.id);
-            const days   = wAtt.reduce((s,a) => s + recVal(a), 0);
-            const salary = wAtt.reduce((s,a) => s + recVal(a) * effectiveWage(w, a.date), 0);
-            const adv    = (p.advances||[]).filter(x=>x.workerId===w.id).reduce((s,x)=>s+(x.amount||0),0);
-            return [i+1, w.name||'', w.role||'', fmt(w.wage||0), days, fmt(salary), fmt(adv), fmt(salary-adv)];
-        });
-
-        // ── Chi tiết công từng ngày ───────────────────
-        const attHeader = ['Ngày', ...ws.map(w=>w.name||'')];
-        const attRows   = allDates.map(d => [
-            d, ...ws.map(w => {
-                const v = getAttVal(p, w.id, d);
-                return v === 0 ? '' : v === 1 ? '1' : String(v);
+    // ── Sheet 2: Báo cáo tổng hợp ────────────────────────
+    const reportSheet = {
+        name: 'Báo cáo', type: 'report',
+        rows: [
+            [`BÁO CÁO TỔNG HỢP · Cập nhật: ${now}`],
+            ['Công trình','Trạng thái','Bắt đầu','Kết thúc','Nhân công (đ)','Chi phí khác (đ)','Tổng chi (đ)','Tạm ứng (đ)','Lợi nhuận (đ)'],
+            ...S.projects.map(p => {
+                const lc=laborCost(p), mc=materialCost(p), cc=contractorCost(p), oc=otherCost(p);
+                const tc=lc+mc+cc+oc, adv=totalAdvances(p);
+                return [p.name||'', p.status==='active'?'Đang thi công':'Hoàn thành',
+                    p.startDate||'', p.endDate||'',
+                    fmt(lc), fmt(mc+cc+oc), fmt(tc), fmt(adv), fmt(adv-tc)];
             })
+        ]
+    };
+
+    // ── Sheet 3+: Mỗi công trình ─────────────────────────
+    const projectSheets = S.projects.map(p => {
+        const sd   = projWeekStartDay(p);
+        const lc   = laborCost(p), mc=materialCost(p), cc=contractorCost(p), oc=otherCost(p);
+        const tc   = lc+mc+cc+oc, adv=totalAdvances(p);
+        const status = p.status==='active'?'Đang thi công':'Hoàn thành';
+
+        // Tất cả tuần có dữ liệu
+        const wsSet = new Set([
+            ...(p.attendance||[]).map(a => toYMD(getWeekStartDate(new Date(a.date+'T00:00:00'), sd))),
+            ...(p.weekExtras||[]).map(e => e.weekStart),
+            ...(p.workerSupport||[]).map(s => s.weekStart),
+            ...(p.weeklyExtraWorkers||[]).map(e => e.weekStart),
         ]);
+        const weeks = [...wsSet].sort();
 
-        // ── Tổng kết tài chính ───────────────────────
-        const lc  = laborCost(p);
-        const mc  = materialCost(p);
-        const cc  = contractorCost(p);
-        const oc  = otherCost(p);
-        const tc  = lc + mc + cc + oc;
-        const rev = p.revenue || 0;
-        const pnl = rev - tc;
+        const rows = [];
 
-        // ── Chi tiết chi phí ──────────────────────────
-        const expTypeLabel = t => t==='contractor'?'Đội Thi Công': t==='other'?'CP Tại Công Trình': 'Chi Vật Tư';
-        const expRows = [...(p.expenses||[])].sort((a,b)=>a.date>b.date?1:-1).map((e,i) => [
-            i+1, e.date||'', expTypeLabel(e.type), e.desc||'', e.payer||'', fmt(e.amount||0), e.note||''
-        ]);
+        // Tiêu đề
+        rows.push([`CÔNG TRÌNH: ${p.name||''}`, '', '', '', `Cập nhật: ${now}`]);
+        rows.push(['Trạng thái', status, 'Từ ngày', p.startDate||'', p.endDate?`→ ${p.endDate}`:'-']);
+        rows.push([]);
 
-        const rows = [
-            [`CÔNG TRÌNH: ${p.name||''}`, '', '', '', '', `Cập nhật: ${now}`],
-            ['Địa chỉ:', p.address||'', '', 'Bắt đầu:', p.startDate||'', 'Trạng thái:', status],
-            [],
-            ['=== DANH SÁCH THỢ ==='],
-            ['STT','Họ tên','Nghề','Lương/ngày (đ)','Tổng công (ngày)','Tổng lương (đ)','Đã ứng (đ)','Còn lại (đ)'],
-            ...workerRows,
-            [],
-            ['=== TỔNG KẾT TÀI CHÍNH ==='],
-            ['Chi phí nhân công',  fmt(lc)],
-            ['Đội Thi Công',        fmt(cc)],
-            ['CP Tại Công Trình',   fmt(oc)],
-            ['Chi Vật Tư',          fmt(mc)],
-            ['Tổng chi phí',       fmt(tc)],
-            ['Doanh thu',          fmt(rev)],
-            ['Lợi nhuận',          fmt(pnl)],
-            [],
-            ['=== CHI TIẾT CHI PHÍ ==='],
-            ['STT','Ngày','Loại','Nội dung','Người chi','Số tiền (đ)','Ghi chú'],
-            ...expRows,
-            [],
-            ['=== CHI TIẾT CHẤM CÔNG ==='],
-            attHeader,
-            ...attRows,
-        ];
+        // Tổng quan tài chính
+        rows.push(['TỔNG QUAN TÀI CHÍNH']);
+        rows.push(['Chi phí nhân công', '', fmt(lc)]);
+        if(cc) rows.push(['  • Đội Thi Công', '', fmt(cc)]);
+        if(oc) rows.push(['  • CP Tại Công Trình', '', fmt(oc)]);
+        if(mc) rows.push(['  • Chi Vật Tư', '', fmt(mc)]);
+        rows.push(['Tổng chi phí', '', fmt(tc)]);
+        rows.push(['Tạm ứng từ chủ nhà', '', fmt(adv)]);
+        rows.push([(adv>=tc?'Lợi nhuận ✅':'Chênh lệch ⚠️'), '', fmt(adv-tc)]);
+        rows.push([]);
 
-        return { name: (p.name||'Công trình').slice(0,31), rows };
+        // Chấm công theo tuần
+        rows.push(['CHẤM CÔNG THEO TUẦN']);
+        rows.push([]);
+        if(!weeks.length) {
+            rows.push(['(Chưa có dữ liệu chấm công)']);
+        } else {
+            weeks.forEach(ws => {
+                const wsDt  = new Date(ws+'T00:00:00');
+                const days  = weekDays(wsDt);
+                const dayStrs = days.map(d => toYMD(d));
+                const we    = dayStrs[6];
+                const dayHdrs = days.map(d => `${DN[d.getDay()]} ${dfs(toYMD(d))}`);
+
+                rows.push([`Tuần: ${df(ws)} → ${df(we)}`]);
+                rows.push(['Tên thợ', ...dayHdrs, 'Tổng ngày', 'Lương/ngày (đ)', 'Tổng tiền (đ)']);
+
+                // Thợ chính
+                const regW = projWorkersForWeek(p, ws);
+                regW.forEach(w => {
+                    const attCols = dayStrs.map(d => { const v=getAttVal(p,w.id,d); return v?v:''; });
+                    const totalDays = dayStrs.reduce((s,d)=>s+getAttVal(p,w.id,d),0);
+                    const money = weekLaborWorker(p,w,days) + getWorkerSupport(p,w.id,ws);
+                    rows.push([w.name||'', ...attCols, totalDays, fmt(effectiveWage(w,ws)), fmt(money)]);
+                });
+
+                // Thợ ngoài (có tên)
+                const namedExt = new Set((p.weeklyExtraWorkers||[]).filter(e=>e.weekStart===ws).map(e=>e.workerId));
+                namedExt.forEach(ewId => {
+                    const ew = S.workers.find(w=>w.id===ewId)||{};
+                    const attCols = dayStrs.map(d => (p.extraWorkerDays||[]).some(e=>e.workerId===ewId&&e.date===d)?1:'');
+                    const totalDays = attCols.filter(v=>v===1).length;
+                    const money = dayStrs.reduce((s,d)=>{
+                        return s+(p.extraWorkerDays||[]).filter(e=>e.workerId===ewId&&e.date===d).reduce((ss,e)=>ss+(e.amount||0),0);
+                    },0);
+                    rows.push([`${ew.name||'Thợ ngoài'} (ngoài)`, ...attCols, totalDays, '', fmt(money)]);
+                });
+
+                // Thợ thuê ngày (ẩn danh)
+                const anonCols = dayStrs.map(d=>{
+                    const a=(p.extraWorkerDays||[]).filter(e=>!e.workerId&&e.date===d).reduce((s,e)=>s+(e.amount||0),0);
+                    return a||'';
+                });
+                const anonTotal = anonCols.reduce((s,v)=>s+(v||0),0);
+                if(anonTotal) rows.push(['Thợ thuê ngày', ...anonCols, '', '', fmt(anonTotal)]);
+
+                // Chi phí phát sinh tuần
+                getWeekExtras(p,ws).forEach(e => {
+                    rows.push([`+ ${e.note||'Chi phí phát sinh'}`, ...blank7(), '', '', fmt(e.amount)]);
+                });
+
+                // Tổng tuần
+                const wkTotal = regW.reduce((s,w)=>s+weekLaborWorker(p,w,days)+getWorkerSupport(p,w.id,ws),0)
+                              + weekDailyExtras(p,days) + weekExtrasCost(p,ws);
+                rows.push(['TỔNG TUẦN', ...blank7(), '', '', fmt(wkTotal)]);
+                rows.push([]);
+            });
+        }
+
+        // Chi phí chi tiết
+        const exps = [...(p.expenses||[])].sort((a,b)=>a.date>b.date?1:-1);
+        rows.push(['CHI PHÍ CHI TIẾT']);
+        if(!exps.length) {
+            rows.push(['(Chưa có chi phí)']);
+        } else {
+            rows.push(['STT','Ngày','Loại','Nội dung','Người chi','Số tiền (đ)','Ghi chú']);
+            exps.forEach((e,i)=>rows.push([i+1, e.date||'', expLabel(e.type), e.desc||'', e.payer||'', fmt(e.amount||0), e.note||'']));
+            rows.push(['Tổng chi phí', '', '', '', '', fmt(mc+cc+oc), '']);
+        }
+        rows.push([]);
+
+        // Tạm ứng chủ nhà
+        const advs = [...(p.advances||[])].sort((a,b)=>a.date>b.date?1:-1);
+        if(advs.length) {
+            rows.push(['TẠM ỨNG CHỦ NHÀ']);
+            rows.push(['STT','Ngày','Ghi chú','Số tiền (đ)']);
+            advs.forEach((a,i)=>rows.push([i+1, a.date||'', a.note||`Đợt ${i+1}`, fmt(a.amount||0)]));
+            rows.push(['Tổng tạm ứng', '', '', fmt(adv)]);
+        }
+
+        return { name:(p.name||'CT').slice(0,31), type:'project', rows };
     });
 
-    return { syncedAt: now, sheets };
+    return {
+        syncedAt: now,
+        sheets: [workerSheet, reportSheet, ...projectSheets]
+    };
 }
 
 function mSheetsSync() {
@@ -2807,67 +2885,112 @@ function mSheetsSync() {
 
 // Code Google Apps Script để user copy vào script.google.com
 function getGASCode() {
-return `// ═══════════════════════════════════════════
-// Khánh Duy - Đồng bộ Google Sheets
-// Dán vào: script.google.com → New project
-// Deploy → Web app → Anyone can access
-// ═══════════════════════════════════════════
+return `// ════════════════════════════════════════════════════
+// Quản lý Công Trình – Google Sheets Sync
+// 1. Vào script.google.com → New project → dán code này
+// 2. Deploy → New deployment → Web app
+//    Execute as: Me | Who has access: Anyone
+// 3. Copy URL → dán vào app (📊 Google Sheets)
+// ════════════════════════════════════════════════════
 
-const SHEET_ID = ''; // Dán ID Google Sheet vào đây
-// (lấy từ URL: docs.google.com/spreadsheets/d/[ID]/edit)
+const SHEET_ID = '1Aqn6p_ABNinMViXJ6Er3Uh9q8vKS3riZk3ANxjEThNU';
 
 function doPost(e) {
   try {
     const data = JSON.parse(e.postData.contents);
-    if (data.sheets) writeStructured(data);
-    return ok('sync done');
+    if (data.sheets) syncSheets(data);
+    return ContentService.createTextOutput('ok').setMimeType(ContentService.MimeType.TEXT);
   } catch(err) {
-    return ok('error: ' + err.message);
+    return ContentService.createTextOutput('error:' + err.message).setMimeType(ContentService.MimeType.TEXT);
   }
 }
 
-function writeStructured(data) {
-  const ss = SHEET_ID
-    ? SpreadsheetApp.openById(SHEET_ID)
-    : SpreadsheetApp.getActiveSpreadsheet();
+function syncSheets(data) {
+  const ss = SpreadsheetApp.openById(SHEET_ID);
+  const incoming = data.sheets || [];
+  const names = incoming.map(s => s.name);
 
-  data.sheets.forEach(sheetData => {
-    let sh = ss.getSheetByName(sheetData.name);
-    if (!sh) sh = ss.insertSheet(sheetData.name);
-    sh.clearContents();
-    sh.clearFormats();
+  // Tạo sheet mới nếu chưa có
+  names.forEach(n => { if (!ss.getSheetByName(n)) ss.insertSheet(n); });
 
-    const rows = sheetData.rows;
-    if (!rows.length) return;
-    sh.getRange(1, 1, rows.length, Math.max(...rows.map(r=>r.length||1)))
-      .setValues(rows.map(r => {
-        // Đảm bảo đủ cột
-        const maxCol = Math.max(...rows.map(x=>x.length||1));
-        while (r.length < maxCol) r.push('');
-        return r;
-      }));
+  // Xóa sheet không còn trong payload
+  ss.getSheets().forEach(sh => {
+    if (!names.includes(sh.getName())) {
+      if (ss.getSheets().length > 1) ss.deleteSheet(sh);
+    }
+  });
 
-    // Format hàng tiêu đề (row 1)
-    sh.getRange(1, 1, 1, rows[0].length)
-      .setBackground('#1e3a5f').setFontColor('#ffffff')
-      .setFontWeight('bold').setFontSize(12);
+  // Ghi dữ liệu + format
+  incoming.forEach(sd => {
+    const sh = ss.getSheetByName(sd.name);
+    if (!sh) return;
+    writeSheet(sh, sd);
+  });
 
-    // Format cột số tiền (cột 4-8 trong phần thợ)
-    sh.setColumnWidth(1, 40);
-    sh.setColumnWidth(2, 160);
-    sh.autoResizeColumns(3, 8);
+  // Sắp xếp thứ tự sheet
+  names.forEach((n, i) => {
+    const sh = ss.getSheetByName(n);
+    if (sh) { ss.setActiveSheet(sh); try { ss.moveActiveSheet(i + 1); } catch(e2){} }
   });
 }
 
-function ok(msg) {
-  return ContentService.createTextOutput(msg)
-    .setMimeType(ContentService.MimeType.TEXT);
+function writeSheet(sh, sd) {
+  sh.clearContents();
+  sh.clearFormats();
+  const rows = sd.rows || [];
+  if (!rows.length) return;
+
+  const maxCols = Math.max(...rows.map(r => Array.isArray(r) ? r.length : 1), 1);
+  const norm = rows.map(r => {
+    if (!Array.isArray(r)) r = [String(r)];
+    while (r.length < maxCols) r.push('');
+    return r.map(v => v === null || v === undefined ? '' : v);
+  });
+
+  sh.getRange(1, 1, norm.length, maxCols).setValues(norm);
+
+  // Format từng dòng
+  rows.forEach((row, i) => {
+    const rn = i + 1;
+    const cell0 = String(Array.isArray(row) ? (row[0]||'') : row || '');
+    const nc = Math.max(Array.isArray(row) ? row.length : 1, maxCols);
+    const rng = sh.getRange(rn, 1, 1, nc);
+
+    if (rn === 1) {
+      rng.setBackground('#1e3a5f').setFontColor('#ffffff').setFontWeight('bold').setFontSize(12);
+    } else if (rn === 2 && (sd.type === 'workers' || sd.type === 'report')) {
+      rng.setBackground('#2d6a9f').setFontColor('#ffffff').setFontWeight('bold');
+    } else if (['TỔNG QUAN TÀI CHÍNH','CHẤM CÔNG THEO TUẦN','CHI PHÍ CHI TIẾT','TẠM ỨNG CHỦ NHÀ'].includes(cell0)) {
+      rng.setBackground('#1d4ed8').setFontColor('#ffffff').setFontWeight('bold').setFontSize(11);
+    } else if (cell0.startsWith('Tuần:')) {
+      rng.setBackground('#dbeafe').setFontColor('#1e40af').setFontWeight('bold');
+    } else if (cell0 === 'Tên thợ' || cell0 === 'STT') {
+      rng.setBackground('#e2e8f0').setFontWeight('bold');
+    } else if (cell0 === 'TỔNG TUẦN') {
+      rng.setBackground('#fef9c3').setFontWeight('bold').setFontSize(11);
+    } else if (['Tổng chi phí','Tổng tạm ứng'].includes(cell0)) {
+      rng.setBackground('#f1f5f9').setFontWeight('bold');
+    } else if (cell0.startsWith('Lợi nhuận') || cell0.startsWith('Chênh lệch')) {
+      rng.setBackground('#dcfce7').setFontWeight('bold');
+    }
+
+    // Format tiền (số > 1000 ở cột từ 2 trở đi)
+    if (Array.isArray(row)) {
+      row.forEach((v, j) => {
+        if (typeof v === 'number' && v >= 1000) {
+          sh.getRange(rn, j + 1).setNumberFormat('#,##0');
+        }
+      });
+    }
+  });
+
+  // Cột đầu rộng hơn cho tên
+  sh.setColumnWidth(1, 170);
+  sh.autoResizeColumns(2, maxCols - 1);
+  sh.setFrozenRows(1);
 }
 
-// Chạy thử thủ công: Tools → Run → testSync
-function testSync() {
-  Logger.log('Apps Script OK - ' + new Date());
-}`;
+function testSync() { Logger.log('GAS OK – ' + new Date()); }`;
 }
 
 function doSavesSheetsUrl() {
