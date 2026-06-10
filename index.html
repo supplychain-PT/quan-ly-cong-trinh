@@ -927,13 +927,18 @@ function fmtShort(d)  { return `${String(d.getDate()).padStart(2,'0')}/${String(
 function toYMD(d)     { return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; }
 function todayYMD()   { return toYMD(new Date()); }
 
-// Week starts Sunday
-function getSunday(d) {
+// Week start: startDay 0=CN, 1=T2
+function getWeekStartDate(d, startDay) {
     const dt = new Date(d);
-    dt.setDate(dt.getDate() - dt.getDay());
+    startDay = startDay || 0;
+    let diff = dt.getDay() - startDay;
+    if (diff < 0) diff += 7;
+    dt.setDate(dt.getDate() - diff);
     dt.setHours(0,0,0,0);
     return dt;
 }
+function getSunday(d) { return getWeekStartDate(d, 0); }
+function projWeekStartDay(p) { return (p && p.weekStartDay) ? p.weekStartDay : 0; }
 function addDays(d, n) { const dt = new Date(d); dt.setDate(dt.getDate() + n); return dt; }
 function weekDays(sun) { return Array.from({length:7}, (_,i) => addDays(sun, i)); }
 
@@ -1026,8 +1031,7 @@ function laborCost(p) {
         (p.attendance||[]).filter(a => {
             if ((a.workerId||a.empId) !== w.id) return false;
             const d = new Date((a.date||'') + 'T00:00:00');
-            const sun = new Date(d); sun.setDate(d.getDate() - d.getDay());
-            const ws = toYMD(sun);
+            const ws = toYMD(getWeekStartDate(d, projWeekStartDay(p)));
             return !absent.find(ab => ab.workerId === w.id && ab.weekStart === ws);
         }).forEach(a => {
             t += recVal(a) * effectiveWage(w, a.date);
@@ -1038,8 +1042,7 @@ function laborCost(p) {
     (p.extraWorkerDays||[]).forEach(e => {
         if (!e.workerId) { t += (e.amount||0); return; }
         const d = new Date((e.date||'') + 'T00:00:00');
-        const sun = new Date(d); sun.setDate(d.getDate() - d.getDay());
-        const ws = toYMD(sun);
+        const ws = toYMD(getWeekStartDate(d, projWeekStartDay(p)));
         if (extraSet.has(e.workerId + '|' + ws)) t += (e.amount||0);
     });
     // Hỗ trợ thêm
@@ -1390,7 +1393,7 @@ function renderSummaryView() {
     <div class="tab-content">
         <div class="week-nav" style="margin-bottom:14px;">
             <span class="week-label" style="text-align:left;">
-                Tuần CN ${fmtShort(sunday)} – T7 ${fmtShort(days[6])}, ${sunday.getFullYear()}
+                Tuần ${DN[days[0].getDay()]} ${fmtShort(days[0])} – ${DN[days[6].getDay()]} ${fmtShort(days[6])}, ${days[0].getFullYear()}
             </span>
         </div>
 
@@ -1681,7 +1684,7 @@ function renderAttendance(p) {
     <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px;flex-wrap:wrap;">
         <div class="week-nav" style="margin-bottom:0;flex:1;">
             <button class="btn btn-outline btn-sm" onclick="prevWeek()">‹</button>
-            <span class="week-label">Tuần ${fmtShort(sunday)} – ${fmtShort(days[6])}, ${sunday.getFullYear()}</span>
+            <span class="week-label">Tuần ${DN[days[0].getDay()]} ${fmtShort(days[0])} – ${DN[days[6].getDay()]} ${fmtShort(days[6])}, ${days[0].getFullYear()}</span>
             <button class="btn btn-outline btn-sm" onclick="nextWeek()">›</button>
             <button class="btn btn-outline btn-sm" onclick="goToday()">Hôm nay</button>
         </div>
@@ -1701,11 +1704,11 @@ function renderAttendance(p) {
     <table class="att-table">
         <thead><tr>
             <th class="col-name">Thợ</th>
-            ${days.map((d,i) => {
+            ${days.map((d) => {
                 const isToday = toYMD(d) === today;
-                const isSun   = i === 0;
+                const isSun   = d.getDay() === 0;
                 return `<th class="${isSun?'col-sun':''} ${isToday?'today-col':''}">
-                    ${DN[i]}<div style="font-weight:400;font-size:9px;color:var(--gray-400);">${fmtShort(d)}</div>
+                    ${DN[d.getDay()]}<div style="font-weight:400;font-size:9px;color:var(--gray-400);">${fmtShort(d)}</div>
                 </th>`;
             }).join('')}
             <th>Ngày</th><th>Tiền</th><th style="color:var(--warning);white-space:nowrap;">Hỗ trợ</th><th style="color:var(--danger);white-space:nowrap;">Ứng</th>
@@ -2097,6 +2100,13 @@ function mNewProj() {
             <option value="1" selected>1N – Một ngày công thêm</option>
         </select>
     </div>
+    <div class="form-group">
+        <label class="form-label">📅 Đầu tuần bắt đầu từ</label>
+        <select class="form-select" id="m-week-start-day">
+            <option value="0">Chủ nhật (CN → T7)</option>
+            <option value="1">Thứ 2 (T2 → CN)</option>
+        </select>
+    </div>
     <div class="modal-footer">
         <button class="btn btn-outline" onclick="closeModal()">Hủy</button>
         <button class="btn btn-primary" onclick="doNewProj()">✅ Tạo công trình</button>
@@ -2106,14 +2116,17 @@ function mNewProj() {
 function doNewProj() {
     const name = $v('m-name').trim();
     if (!name) { alert('Vui lòng nhập tên công trình'); return; }
+    const weekStartDay = parseInt($v('m-week-start-day')) || 0;
     const p = {
         id: uid(), name,
         startDate: $v('m-start'), endDate: null, status: 'active',
         revenue: $f('m-revenue'), otRate: $f('m-ot') || 1.5, nightOtRate: $f('m-night-ot') || 1,
+        weekStartDay,
         workerIds: [], attendance: [], expenses: [], advances: [], payments: [],
     };
     S.projects.push(p);
     S.view = p.id; S.tab = 'attendance';
+    S.weekStart = getWeekStartDate(new Date(), weekStartDay);
     save(); closeModal(); renderAll();
 }
 
@@ -2147,6 +2160,13 @@ function mEditProj() {
             <option value="1" ${(p.nightOtRate||1)==1?'selected':''}>1N – Một ngày công thêm</option>
         </select>
     </div>
+    <div class="form-group">
+        <label class="form-label">📅 Đầu tuần bắt đầu từ</label>
+        <select class="form-select" id="m-week-start-day">
+            <option value="0" ${(p.weekStartDay||0)===0?'selected':''}>Chủ nhật (CN → T7)</option>
+            <option value="1" ${(p.weekStartDay||0)===1?'selected':''}>Thứ 2 (T2 → CN)</option>
+        </select>
+    </div>
     <div class="modal-footer">
         <button class="btn btn-outline" onclick="closeModal()">Hủy</button>
         <button class="btn btn-primary" onclick="doEditProj()">💾 Lưu</button>
@@ -2158,6 +2178,8 @@ function doEditProj() {
     if (!name) { alert('Nhập tên công trình'); return; }
     p.name = name; p.startDate = $v('m-start');
     p.revenue = $f('m-revenue'); p.otRate = $f('m-ot') || 1.5; p.nightOtRate = $f('m-night-ot') || 1;
+    p.weekStartDay = parseInt($v('m-week-start-day')) || 0;
+    S.weekStart = getWeekStartDate(S.weekStart, p.weekStartDay);
     save(); closeModal(); renderAll();
 }
 
@@ -2911,7 +2933,8 @@ function selectView(v) {
     S.view = v;
     if (v !== 'workers' && v !== 'summary') {
         S.tab = 'attendance';
-        S.weekStart = getSunday(new Date());
+        const p = S.projects.find(x => x.id === v);
+        S.weekStart = getWeekStartDate(new Date(), projWeekStartDay(p));
     }
     closeSidebar(); renderAll();
 }
@@ -2919,7 +2942,7 @@ function selectView(v) {
 function setTab(t) { S.tab = t; renderMain(); }
 function prevWeek() { S.weekStart = addDays(S.weekStart, -7); renderMain(); }
 function nextWeek() { S.weekStart = addDays(S.weekStart,  7); renderMain(); }
-function goToday()  { S.weekStart = getSunday(new Date());    renderMain(); }
+function goToday()  { S.weekStart = getWeekStartDate(new Date(), projWeekStartDay(cur())); renderMain(); }
 
 function toggleExtraWorkerDay(projId, date, workerId) {
     const p = proj(projId);
