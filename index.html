@@ -2045,7 +2045,49 @@ function renderOverview(p) {
                 </tr></tfoot>
             </table>`}
         </div>
+    </div>
+
+    ${(()=>{
+        const sd = projWeekStartDay(p);
+        const wsSet = new Set([
+            ...(p.attendance||[]).map(a => toYMD(getWeekStartDate(new Date(a.date+'T00:00:00'), sd))),
+            ...(p.weekExtras||[]).map(e => e.weekStart),
+            ...(p.workerSupport||[]).map(s => s.weekStart),
+            ...(p.weeklyExtraWorkers||[]).map(e => e.weekStart),
+        ]);
+        const weeks = [...wsSet].filter(Boolean).sort();
+        if (!weeks.length) return '';
+        const dfs = s => { const d=new Date(s+'T00:00:00'); return `${d.getDate()}/${d.getMonth()+1}`; };
+        let grandTotal = 0;
+        const rows = weeks.map(ws => {
+            const wsDt = new Date(ws+'T00:00:00');
+            const days = weekDays(wsDt);
+            const we = toYMD(days[6]);
+            const regW = projWorkersForWeek(p, ws);
+            const wkTotal = regW.reduce((s,w)=>s+weekLaborWorker(p,w,days)+getWorkerSupport(p,w.id,ws),0)
+                          + weekDailyExtras(p,days) + weekExtrasCost(p,ws);
+            const workerCount = regW.length + new Set((p.weeklyExtraWorkers||[]).filter(e=>e.weekStart===ws).map(e=>e.workerId)).size;
+            grandTotal += wkTotal;
+            const hasExtras = weekExtrasCost(p,ws) > 0;
+            return `<tr>
+                <td class="fs12">${dfs(ws)} – ${dfs(we)}</td>
+                <td class="tc fs12">${workerCount > 0 ? workerCount+'N' : '-'}</td>
+                <td class="tr fw6 fs12 c-blue">${fmtMoney(wkTotal)}${hasExtras?` <span class="fs11 c-gray">(+p/s)</span>`:''}</td>
+            </tr>`;
+        });
+        return `
+    <div class="card" style="margin-top:0;">
+        <div class="card-header"><span class="card-title">📅 Nhân công theo tuần</span></div>
+        <table class="data-table">
+            <thead><tr><th>Tuần</th><th class="tc">Thợ</th><th class="tr">Chi phí nhân công</th></tr></thead>
+            <tbody>${rows.join('')}</tbody>
+            <tfoot><tr>
+                <td class="fw7" colspan="2">Tổng nhân công</td>
+                <td class="tr fw7 c-blue">${fmtMoney(grandTotal)}</td>
+            </tr></tfoot>
+        </table>
     </div>`;
+    })()}`;
 }
 
 // ══════════════════════════════════════════════════════════
