@@ -1866,10 +1866,27 @@ function renderWeekExtras(p, weekStart) {
 
 // ── EXPENSES ──────────────────────────────────────────────
 function renderExpenses(p) {
-    const exps = [...(p.expenses||[])].sort((a,b)=>b.date>a.date?1:-1);
+    const EXP_ORDER = {contractor:0, other:1, material:2};
+    const EXP_META  = {
+        contractor: {icon:'👷', bg:'#fce7f3', label:'Đội Thi Công',       clr:'#9d174d'},
+        other:      {icon:'🏗️', bg:'#fff7ed', label:'CP Tại Công Trình',  clr:'#9a3412'},
+        material:   {icon:'🧱', bg:'#fef9c3', label:'Chi Vật Tư',         clr:'#713f12'},
+    };
+    const exps = [...(p.expenses||[])].sort((a,b)=>{
+        const ta = EXP_ORDER[a.type]??99, tb = EXP_ORDER[b.type]??99;
+        if (ta !== tb) return ta - tb;
+        return a.date > b.date ? 1 : a.date < b.date ? -1 : 0;
+    });
     const mc = materialCost(p), cc = contractorCost(p), oc = otherCost(p);
-    const expIcon = e => e.type==='contractor'?'👷': e.type==='other'?'🏗️': '🧱';
-    const expBg   = e => e.type==='contractor'?'#fce7f3': e.type==='other'?'#fff7ed': '#fef9c3';
+
+    // Group by type
+    const groups = [];
+    let cur = null;
+    exps.forEach(e => {
+        if (!cur || cur.type !== e.type) { cur = {type:e.type, items:[]}; groups.push(cur); }
+        cur.items.push(e);
+    });
+
     return `
     <div class="stats-grid">
         <div class="stat-card"><div class="stat-label">Đội Thi Công</div><div class="stat-value neutral">${fmtMoney(cc)}</div></div>
@@ -1884,23 +1901,23 @@ function renderExpenses(p) {
         </div>
         ${!exps.length
             ? `<div class="empty" style="padding:24px;"><div class="empty-icon">📋</div><div class="empty-desc">Chưa có chi phí nào</div></div>`
-            : exps.map((e,idx)=>`
-        <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;
-                    border-top:${idx===0?'1px solid var(--gray-100)':'0'};
-                    border-bottom:1px solid var(--gray-100);">
-            <!-- icon loại -->
-            <div style="width:36px;height:36px;border-radius:10px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:17px;
-                        background:${expBg(e)};">
-                ${expIcon(e)}
-            </div>
-            <!-- nội dung -->
+            : groups.map(g => {
+                const m = EXP_META[g.type] || {icon:'💰',bg:'#f1f5f9',label:g.type,clr:'#475569'};
+                const groupTotal = g.items.reduce((s,e)=>s+(e.amount||0),0);
+                return `
+        <div style="padding:5px 14px;background:${m.bg};border-top:1px solid var(--gray-200);
+                    display:flex;align-items:center;justify-content:space-between;">
+            <span style="font-size:11px;font-weight:700;color:${m.clr};">${m.icon} ${m.label} · ${g.items.length} mục</span>
+            <span style="font-size:11px;font-weight:700;color:${m.clr};">${fmtMoney(groupTotal)}</span>
+        </div>
+        ${g.items.map(e=>`
+        <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--gray-100);">
             <div style="flex:1;min-width:0;">
                 <div style="font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
                     ${esc(e.desc||'–')}
                 </div>
                 <div class="fs11 c-gray">${fmtDate(e.date)}${e.payer?` · <span style="font-weight:600;color:var(--gray-600);">${esc(e.payer)}</span>`:''}</div>
             </div>
-            <!-- số tiền + actions -->
             <div style="text-align:right;flex-shrink:0;">
                 <div style="font-size:14px;font-weight:700;color:var(--danger);">${fmtMoney(e.amount)}</div>
                 ${p.status==='active'?`<div style="margin-top:2px;">
@@ -1908,11 +1925,12 @@ function renderExpenses(p) {
                     <button class="btn btn-ghost btn-xs" onclick="deleteExpense('${p.id}','${e.id}')" style="padding:1px 4px;">🗑️</button>
                 </div>`:''}
             </div>
-        </div>`).join('')}
+        </div>`).join('')}`;
+            }).join('')}
         <div style="padding:10px 14px;background:var(--gray-50);border-top:2px solid var(--gray-200);
                     display:flex;justify-content:space-between;font-weight:700;">
             <span>Tổng cộng</span>
-            <span style="color:var(--danger);">${fmtMoney(mc+oc)}</span>
+            <span style="color:var(--danger);">${fmtMoney(mc+cc+oc)}</span>
         </div>
     </div>`;
 }
@@ -2810,7 +2828,12 @@ function buildSheetsPayload() {
         }
 
         // Chi phí chi tiết
-        const exps = [...(p.expenses||[])].sort((a,b)=>a.date>b.date?1:-1);
+        const EXP_ORD = {contractor:0, other:1, material:2};
+        const exps = [...(p.expenses||[])].sort((a,b)=>{
+            const ta=EXP_ORD[a.type]??99, tb=EXP_ORD[b.type]??99;
+            if(ta!==tb) return ta-tb;
+            return a.date>b.date?1:a.date<b.date?-1:0;
+        });
         rows.push(['CHI PHÍ CHI TIẾT']);
         if(!exps.length) {
             rows.push(['(Chưa có chi phí)']);
