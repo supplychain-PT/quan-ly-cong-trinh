@@ -2794,46 +2794,54 @@ function buildSheetsPayload() {
         const weeks = [...wsSet].sort();
 
         const rows = [];
+        const PR   = 11; // số cột cố định cho project sheet (khớp với attendance 1+7+3)
+        const pad  = arr => { const r=[...arr]; while(r.length<PR) r.push(''); return r; };
+        // fRow: nhãn ở cột 1, giá trị ở cột cuối (cột 11), giữa để trống → GAS tự merge
+        const fRow = (lbl, val) => { const r=[lbl]; while(r.length<PR-1) r.push(''); r.push(val??''); return r; };
+        const fSub = (lbl, val) => fRow('  • '+lbl, val); // sub-item thụt lề
 
-        // Tiêu đề
-        rows.push([`CÔNG TRÌNH: ${p.name||''}`, '', '', '', `Cập nhật: ${now}`]);
+        // ── Tiêu đề
+        rows.push([`CÔNG TRÌNH: ${p.name||''}`]);
         rows.push(['Trạng thái', status, 'Từ ngày', p.startDate||'', p.endDate?`→ ${p.endDate}`:'-']);
         rows.push([]);
 
-        // Tổng quan tài chính
+        // ── Tổng quan tài chính (giá trị ở cột 11 = 120px, đủ rộng cho mọi số)
         rows.push(['TỔNG QUAN TÀI CHÍNH']);
-        rows.push(['Chi phí nhân công', '', fmt(lc)]);
-        if(cc) rows.push(['  • Đội Thi Công', '', fmt(cc)]);
-        if(oc) rows.push(['  • CP Tại Công Trình', '', fmt(oc)]);
-        if(mc) rows.push(['  • Chi Vật Tư', '', fmt(mc)]);
-        rows.push(['Tổng chi phí', '', fmt(tc)]);
-        rows.push(['Tạm ứng từ chủ nhà', '', fmt(adv)]);
-        rows.push([(adv>=tc?'Lợi nhuận ✅':'Chênh lệch ⚠️'), '', fmt(adv-tc)]);
+        rows.push(fRow('Chi phí nhân công', fmt(lc)));
+        if(cc) rows.push(fSub('Đội Thi Công', fmt(cc)));
+        if(oc) rows.push(fSub('CP Tại Công Trình', fmt(oc)));
+        if(mc) rows.push(fSub('Chi Vật Tư', fmt(mc)));
+        rows.push(fRow('Tổng chi phí', fmt(tc)));
+        rows.push(fRow('Tạm ứng từ chủ nhà', fmt(adv)));
+        rows.push(fRow(adv>=tc?'Lợi nhuận ✅':'Chênh lệch ⚠️', fmt(adv-tc)));
         rows.push([]);
 
-        // Chấm công theo tuần
+        // ── Chấm công theo tuần
         rows.push(['CHẤM CÔNG THEO TUẦN']);
         rows.push([]);
         if(!weeks.length) {
             rows.push(['(Chưa có dữ liệu chấm công)']);
         } else {
             weeks.forEach(ws => {
-                const wsDt  = new Date(ws+'T00:00:00');
-                const days  = weekDays(wsDt);
+                const wsDt   = new Date(ws+'T00:00:00');
+                const days   = weekDays(wsDt);
                 const dayStrs = days.map(d => toYMD(d));
-                const we    = dayStrs[6];
+                const we     = dayStrs[6];
                 const dayHdrs = days.map(d => `${DN[d.getDay()]} ${dfs(toYMD(d))}`);
 
                 rows.push([`Tuần: ${df(ws)} → ${df(we)}`]);
-                rows.push(['Tên thợ', ...dayHdrs, 'Tổng ngày', 'Lương/ngày (đ)', 'Tổng tiền (đ)']);
+                rows.push(['Tên thợ', ...dayHdrs, 'Tổng', 'Lương/ngày', 'Thành tiền']);
 
-                // Thợ chính
-                const regW = projWorkersForWeek(p, ws);
+                // Thợ chính – bỏ qua thợ không chấm công và không có hỗ trợ trong tuần này
+                const regW = projWorkersForWeek(p, ws).filter(w => {
+                    const tot = dayStrs.reduce((s,d)=>s+getAttVal(p,w.id,d), 0);
+                    return tot > 0 || getWorkerSupport(p, w.id, ws) > 0;
+                });
                 regW.forEach(w => {
-                    const attCols = dayStrs.map(d => { const v=getAttVal(p,w.id,d); return v?v:''; });
-                    const totalDays = dayStrs.reduce((s,d)=>s+getAttVal(p,w.id,d),0);
-                    const sup = getWorkerSupport(p, w.id, ws);
-                    const money = weekLaborWorker(p,w,days) + sup;
+                    const attCols   = dayStrs.map(d => { const v=getAttVal(p,w.id,d); return v?v:''; });
+                    const totalDays = dayStrs.reduce((s,d)=>s+getAttVal(p,w.id,d), 0);
+                    const sup       = getWorkerSupport(p, w.id, ws);
+                    const money     = weekLaborWorker(p,w,days) + sup;
                     rows.push([w.name||'', ...attCols, totalDays, fmt(effectiveWage(w,ws)), fmt(money)]);
                     if (sup > 0) rows.push([`+ Hỗ trợ: ${w.name||''}`, ...blank7(), '', '', fmt(sup)]);
                 });
@@ -2871,7 +2879,8 @@ function buildSheetsPayload() {
             });
         }
 
-        // Chi phí chi tiết
+        // ── Chi phí chi tiết
+        // Cột 1 (220px) = Nội dung, cột 11 (120px) = Số tiền → không bị mất chữ
         const EXP_ORD = {contractor:0, other:1, material:2};
         const exps = [...(p.expenses||[])].sort((a,b)=>{
             const ta=EXP_ORD[a.type]??99, tb=EXP_ORD[b.type]??99;
@@ -2880,21 +2889,29 @@ function buildSheetsPayload() {
         });
         rows.push(['CHI PHÍ CHI TIẾT']);
         if(!exps.length) {
-            rows.push(['(Chưa có chi phí)']);
+            rows.push(pad(['(Chưa có chi phí)']));
         } else {
-            rows.push(['STT','Ngày','Loại','Nội dung','Người chi','Số tiền (đ)','Ghi chú']);
-            exps.forEach((e,i)=>rows.push([i+1, e.date||'', expLabel(e.type), e.desc||'', e.payer||'', fmt(e.amount||0), e.note||'']));
-            rows.push(['Tổng chi phí', '', '', '', '', fmt(mc+cc+oc), '']);
+            rows.push(pad(['Nội dung', 'STT', 'Ngày', 'Loại', 'Người chi', 'Ghi chú', '', '', '', '', 'Số tiền (đ)']));
+            let prevExpType = null, sttNum = 1;
+            exps.forEach(e => {
+                if (e.type !== prevExpType) {
+                    prevExpType = e.type;
+                    const EXP_GRP = {contractor:'👷 ĐỘI THI CÔNG', other:'🏗 CP TẠI CÔNG TRÌNH', material:'🧱 CHI VẬT TƯ'};
+                    rows.push(pad([EXP_GRP[e.type]||e.type]));
+                }
+                rows.push(pad([e.desc||'', sttNum++, e.date||'', expLabel(e.type), e.payer||'', e.note||'', '', '', '', '', fmt(e.amount||0)]));
+            });
+            rows.push(fRow('Tổng chi phí', fmt(mc+cc+oc)));
         }
         rows.push([]);
 
-        // Tạm ứng chủ nhà
+        // ── Tạm ứng chủ nhà
         const advs = [...(p.advances||[])].sort((a,b)=>a.date>b.date?1:-1);
         if(advs.length) {
             rows.push(['TẠM ỨNG CHỦ NHÀ']);
-            rows.push(['STT','Ngày','Ghi chú','Số tiền (đ)']);
-            advs.forEach((a,i)=>rows.push([i+1, a.date||'', a.note||`Đợt ${i+1}`, fmt(a.amount||0)]));
-            rows.push(['Tổng tạm ứng', '', '', fmt(adv)]);
+            rows.push(pad(['Ghi chú', 'STT', 'Ngày', '', '', '', '', '', '', '', 'Số tiền (đ)']));
+            advs.forEach((a,i) => rows.push(pad([a.note||`Đợt ${i+1}`, i+1, a.date||'', '', '', '', '', '', '', '', fmt(a.amount||0)])));
+            rows.push(fRow('Tổng tạm ứng', fmt(adv)));
         }
 
         return { name:(p.name||'CT').slice(0,31), type:'project', rows };
@@ -3044,7 +3061,6 @@ function writeSheet(sh, sd) {
     return r.map(function(v){ return (v === null || v === undefined) ? '' : v; });
   });
 
-  // 1. Ghi toan bo + style goc
   sh.getRange(1, 1, norm.length, maxCols)
     .setValues(norm).setFontFamily('Arial').setFontSize(10).setVerticalAlignment('middle');
 
@@ -3052,15 +3068,11 @@ function writeSheet(sh, sd) {
   var BS = SpreadsheetApp.BorderStyle;
   var SECS = ['TỔNG QUAN TÀI CHÍNH','CHẤM CÔNG THEO TUẦN','CHI PHÍ CHI TIẾT','TẠM ỨNG CHỦ NHÀ'];
 
-  // 2. Phan loai tung hang (pass 1)
   var b = { navy:[], info:[], colHdr:[], secHdr:[], wkHdr:[],
             totLbl:[], totVal:[], extLbl:[], extVal:[],
-            sumRow:[], profRow:[], alt:[], norm:[], blank:[] };
-  var merges   = [];   // [rn, c1, nc]
-  var heights  = {};   // rn -> px
-  var numCells = [];   // [rn, cn]
-  var ctrCells = [];   // [rn, cn]
-  var altRow   = false;
+            sumRow:[], profRow:[], finRow:[], finSub:[],
+            expTypeHdr:[], alt:[], norm:[], blank:[] };
+  var merges=[], heights={}, numCells=[], ctrCells=[], altRow=false;
 
   rows.forEach(function(row, i) {
     var rn = i + 1;
@@ -3068,148 +3080,148 @@ function writeSheet(sh, sd) {
     var empty = !Array.isArray(row) || row.every(function(v){ return !v && v !== 0; });
     if (empty) { b.blank.push(rn); return; }
 
-    if (rn === 1) {
-      b.navy.push(rn); merges.push([rn,1,maxCols]); heights[rn]=isProj?44:38; return;
-    }
-    if (rn === 2) {
-      if (isProj) { b.info.push(rn); heights[rn]=22; }
-      else        { b.colHdr.push(rn); heights[rn]=34; }
+    if (rn===1) { b.navy.push(rn); merges.push([rn,1,maxCols]); heights[rn]=isProj?44:38; return; }
+    if (rn===2) {
+      if (isProj){ b.info.push(rn); heights[rn]=28; }
+      else       { b.colHdr.push(rn); heights[rn]=34; }
       return;
     }
-    if (SECS.indexOf(c0) >= 0) {
-      b.secHdr.push(rn); merges.push([rn,1,maxCols]); heights[rn]=30; altRow=false; return;
+    if (SECS.indexOf(c0)>=0) { b.secHdr.push(rn); merges.push([rn,1,maxCols]); heights[rn]=30; altRow=false; return; }
+    if (c0.indexOf('Tuần:')===0) { b.wkHdr.push(rn); merges.push([rn,1,maxCols]); heights[rn]=28; altRow=false; return; }
+
+    // Expense type group headers (emoji-prefixed: 👷 🏗 🧱)
+    var cp0 = c0.codePointAt ? c0.codePointAt(0) : c0.charCodeAt(0);
+    if (cp0 > 0x2000 && isProj) {
+      b.expTypeHdr.push(rn); merges.push([rn,1,maxCols]); heights[rn]=24; altRow=false; return;
     }
-    if (c0.indexOf('Tuần:') === 0) {
-      b.wkHdr.push(rn); merges.push([rn,1,maxCols]); heights[rn]=28; altRow=false; return;
+
+    // Column headers — merge trailing empty cols to clean up layout
+    if (c0==='Tên thợ'||c0==='STT'||c0==='Nội dung'||c0==='Ghi chú') {
+      b.colHdr.push(rn); heights[rn]=(c0==='Tên thợ')?38:30;
+      if (Array.isArray(row) && maxCols>=7 && c0!=='Tên thợ') {
+        var hT=maxCols;
+        for(var j=maxCols-2;j>=2;j--){ if(row[j]===''||row[j]===null||row[j]===undefined) hT=j+1; else break; }
+        if(hT<maxCols && maxCols-hT>=2) merges.push([rn,hT,maxCols-hT]);
+      }
+      return;
     }
-    if (c0 === 'Tên thợ' || c0 === 'STT') {
-      b.colHdr.push(rn); heights[rn] = (c0==='Tên thợ')?38:28; return;
+    if (c0==='TỔNG TUẦN') {
+      b.totLbl.push(rn); merges.push([rn,1,maxCols-1]);
+      b.totVal.push(rn); heights[rn]=30; return;
     }
-    if (c0 === 'TỔNG TUẦN') {
-      if (maxCols>1){ b.totLbl.push(rn); merges.push([rn,1,maxCols-1]); }
-      b.totVal.push(rn); heights[rn]=28; return;
+    if (isProj && c0.charAt(0)==='+') {
+      b.extLbl.push(rn); merges.push([rn,1,maxCols-1]);
+      b.extVal.push(rn); heights[rn]=24; return;
     }
-    if (isProj && c0.charAt(0) === '+') {
-      if (maxCols>1){ b.extLbl.push(rn); merges.push([rn,1,maxCols-1]); }
-      b.extVal.push(rn); heights[rn]=22; return;
+    if (c0==='Tổng chi phí'||c0==='Tổng tạm ứng') {
+      b.sumRow.push(rn); merges.push([rn,1,maxCols-1]); heights[rn]=28;
+      if(Array.isArray(row)&&typeof row[maxCols-1]==='number') numCells.push([rn,maxCols]);
+      return;
     }
-    if (c0==='Tổng chi phí' || c0==='Tổng tạm ứng') {
-      b.sumRow.push(rn); heights[rn]=24; return;
+    if (c0.indexOf('Lợi nhuận')===0||c0.indexOf('Chênh lệch')===0) {
+      b.profRow.push(rn); merges.push([rn,1,maxCols-1]); heights[rn]=28;
+      if(Array.isArray(row)&&typeof row[maxCols-1]==='number') numCells.push([rn,maxCols]);
+      return;
     }
-    if (c0.indexOf('Lợi nhuận')===0 || c0.indexOf('Chênh lệch')===0) {
-      b.profRow.push(rn); heights[rn]=24; return;
+
+    // Tự động phát hiện "financial label-value" rows:
+    // cột 1 có nội dung, cột 2..maxCols-1 rỗng, cột cuối có giá trị → merge label span
+    if (Array.isArray(row) && row.length>=maxCols) {
+      var midEmpty = row.slice(1,maxCols-1).every(function(v){ return v===''||v===null||v===undefined; });
+      var hasLast  = (row[maxCols-1]!==''&&row[maxCols-1]!==null&&row[maxCols-1]!==undefined);
+      if (midEmpty && hasLast) {
+        var isSub = (c0.charAt(0)===' ');
+        if(isSub){ b.finSub.push(rn); } else { b.finRow.push(rn); }
+        merges.push([rn,1,maxCols-1]);
+        heights[rn] = isSub ? 22 : 26;
+        if(typeof row[maxCols-1]==='number'&&Math.abs(row[maxCols-1])>=1000) numCells.push([rn,maxCols]);
+        altRow = !altRow;
+        return;
+      }
     }
+
+    // Dòng dữ liệu thường
     if (altRow){ b.alt.push(rn); } else { b.norm.push(rn); }
-    heights[rn]=22; altRow=!altRow;
+    heights[rn]=26; altRow=!altRow;
     if (Array.isArray(row)) {
       row.forEach(function(v,j){
-        if (typeof v==='number'){
-          if (Math.abs(v)>=1000) numCells.push([rn,j+1]);
-          else if (v>=0&&v<=10)  ctrCells.push([rn,j+1]);
+        if(typeof v==='number'){
+          if(Math.abs(v)>=1000) numCells.push([rn,j+1]);
+          else if(v>=0&&v<=10)  ctrCells.push([rn,j+1]);
         }
       });
     }
+    // Gộp cột rỗng ở đuôi (từ cột 7 trở đi) cho bảng chi phí / tạm ứng
+    if (maxCols>=9 && Array.isArray(row) && row.length>=maxCols) {
+      var tS=-1;
+      for(var k=maxCols-2;k>=6;k--){
+        var tv=row[k];
+        if(tv===''||tv===null||tv===undefined){ tS=k; } else { break; }
+      }
+      if(tS>=6 && maxCols-1-tS>=1) merges.push([rn,tS+1,maxCols-1-tS]);
+    }
   });
 
-  // 3. Merge truoc
-  merges.forEach(function(m){ sh.getRange(m[0],m[1],1,m[2]).merge(); });
+  // Thực hiện merge (bọc try-catch đề phòng conflict)
+  merges.forEach(function(m){ try{ sh.getRange(m[0],m[1],1,m[2]).merge(); }catch(me){} });
 
-  // 4. Apply styles theo nhom (BATCH - nhanh hon nhieu)
   var mc = maxCols;
-  if (b.navy.length) {
-    rnList(sh,b.navy,1,mc).setBackground(CLR.navyBg).setFontColor(CLR.navyFg)
-      .setFontWeight('bold').setHorizontalAlignment('center').setFontSize(isProj?14:13);
-    bdrBatch(sh,b.navy,1,mc,false,'#0f172a',BS.SOLID_MEDIUM);
+  if(b.navy.length)       { rnList(sh,b.navy,1,mc).setBackground(CLR.navyBg).setFontColor(CLR.navyFg).setFontWeight('bold').setHorizontalAlignment('center').setFontSize(isProj?14:13); bdrBatch(sh,b.navy,1,mc,false,'#0f172a',BS.SOLID_MEDIUM); }
+  if(b.info.length)       { rnList(sh,b.info,1,mc).setBackground(CLR.infoBg).setFontColor(CLR.infoFg).setFontStyle('italic').setWrap(true); bdrBatch(sh,b.info,1,mc,true,CLR.bdr,BS.SOLID); }
+  if(b.colHdr.length)     { rnList(sh,b.colHdr,1,mc).setBackground(CLR.colHdrBg).setFontColor(CLR.colHdrFg).setFontWeight('bold').setHorizontalAlignment('center').setWrap(true); bdrBatch(sh,b.colHdr,1,mc,true,CLR.bdrMed,BS.SOLID); }
+  if(b.secHdr.length)     { rnList(sh,b.secHdr,1,mc).setBackground(CLR.secBg).setFontColor(CLR.secFg).setFontWeight('bold').setFontSize(11).setHorizontalAlignment('left'); bdrBatch(sh,b.secHdr,1,mc,false,'#1e40af',BS.SOLID_MEDIUM); }
+  if(b.wkHdr.length)      { rnList(sh,b.wkHdr,1,mc).setBackground(CLR.wkBg).setFontColor(CLR.wkFg).setFontWeight('bold').setFontSize(11).setHorizontalAlignment('center'); bdrBatch(sh,b.wkHdr,1,mc,false,'#93c5fd',BS.SOLID); }
+  if(b.expTypeHdr.length) { rnList(sh,b.expTypeHdr,1,mc).setBackground('#e0f2fe').setFontColor('#0369a1').setFontWeight('bold').setFontSize(10).setHorizontalAlignment('left'); bdrBatch(sh,b.expTypeHdr,1,mc,false,'#7dd3fc',BS.SOLID); }
+  if(b.totLbl.length)     { rnList(sh,b.totLbl,1,mc-1).setBackground(CLR.totBg).setFontColor(CLR.totFg).setFontWeight('bold').setFontSize(11).setHorizontalAlignment('left'); bdrBatch(sh,b.totLbl,1,mc-1,false,CLR.totBdr,BS.SOLID_MEDIUM); }
+  if(b.totVal.length)     { rnList(sh,b.totVal,mc,1).setBackground(CLR.totBg).setFontColor(CLR.totFg).setFontWeight('bold').setFontSize(11).setNumberFormat('#,##0').setHorizontalAlignment('right'); bdrBatch(sh,b.totVal,mc,1,false,CLR.totBdr,BS.SOLID_MEDIUM); }
+  if(b.extLbl.length)     { rnList(sh,b.extLbl,1,mc-1).setBackground(CLR.extBg).setFontColor(CLR.extFg).setFontStyle('italic').setHorizontalAlignment('left').setWrap(true); bdrBatch(sh,b.extLbl,1,mc-1,false,CLR.extBdr,BS.SOLID); }
+  if(b.extVal.length)     { rnList(sh,b.extVal,mc,1).setBackground(CLR.extBg).setFontColor(CLR.extFg).setFontWeight('bold').setFontStyle('normal').setNumberFormat('#,##0').setHorizontalAlignment('right'); bdrBatch(sh,b.extVal,mc,1,false,CLR.extBdr,BS.SOLID); }
+  if(b.sumRow.length)     {
+    rnList(sh,b.sumRow,1,mc-1).setBackground(CLR.sumBg).setFontWeight('bold').setFontSize(11).setHorizontalAlignment('left');
+    rnList(sh,b.sumRow,mc,1).setBackground(CLR.sumBg).setFontWeight('bold').setFontSize(11).setNumberFormat('#,##0').setHorizontalAlignment('right');
+    bdrBatch(sh,b.sumRow,1,mc,false,CLR.bdrMed,BS.SOLID_MEDIUM);
   }
-  if (b.info.length) {
-    rnList(sh,b.info,1,mc).setBackground(CLR.infoBg).setFontColor(CLR.infoFg).setFontStyle('italic');
-    bdrBatch(sh,b.info,1,mc,true,CLR.bdr,BS.SOLID);
+  if(b.profRow.length)    {
+    rnList(sh,b.profRow,1,mc-1).setBackground(CLR.profBg).setFontColor(CLR.profFg).setFontWeight('bold').setFontSize(11);
+    rnList(sh,b.profRow,mc,1).setBackground(CLR.profBg).setFontColor(CLR.profFg).setFontWeight('bold').setFontSize(11).setNumberFormat('#,##0').setHorizontalAlignment('right');
+    bdrBatch(sh,b.profRow,1,mc,false,'#86efac',BS.SOLID);
   }
-  if (b.colHdr.length) {
-    rnList(sh,b.colHdr,1,mc).setBackground(CLR.colHdrBg).setFontColor(CLR.colHdrFg)
-      .setFontWeight('bold').setHorizontalAlignment('center').setWrap(true);
-    bdrBatch(sh,b.colHdr,1,mc,true,CLR.bdrMed,BS.SOLID);
+  if(b.finRow.length)     {
+    rnList(sh,b.finRow,1,mc-1).setBackground('#f0f4f8').setFontWeight('bold').setFontSize(11).setHorizontalAlignment('left');
+    rnList(sh,b.finRow,mc,1).setBackground('#f0f4f8').setFontWeight('bold').setFontSize(11).setNumberFormat('#,##0').setHorizontalAlignment('right');
+    bdrBatch(sh,b.finRow,1,mc,false,'#cbd5e1',BS.SOLID);
   }
-  if (b.secHdr.length) {
-    rnList(sh,b.secHdr,1,mc).setBackground(CLR.secBg).setFontColor(CLR.secFg)
-      .setFontWeight('bold').setFontSize(11).setHorizontalAlignment('left');
-    bdrBatch(sh,b.secHdr,1,mc,false,'#1e40af',BS.SOLID_MEDIUM);
+  if(b.finSub.length)     {
+    rnList(sh,b.finSub,1,mc-1).setBackground('#f8fafc').setFontStyle('italic').setHorizontalAlignment('left');
+    rnList(sh,b.finSub,mc,1).setBackground('#f8fafc').setFontStyle('italic').setNumberFormat('#,##0').setHorizontalAlignment('right');
+    bdrBatch(sh,b.finSub,1,mc,false,'#e2e8f0',BS.DASHED);
   }
-  if (b.wkHdr.length) {
-    rnList(sh,b.wkHdr,1,mc).setBackground(CLR.wkBg).setFontColor(CLR.wkFg)
-      .setFontWeight('bold').setFontSize(11).setHorizontalAlignment('center');
-    bdrBatch(sh,b.wkHdr,1,mc,false,'#93c5fd',BS.SOLID);
-  }
-  if (b.totLbl.length) {
-    rnList(sh,b.totLbl,1,mc-1).setBackground(CLR.totBg).setFontColor(CLR.totFg)
-      .setFontWeight('bold').setFontSize(11).setHorizontalAlignment('left');
-    bdrBatch(sh,b.totLbl,1,mc-1,false,CLR.totBdr,BS.SOLID_MEDIUM);
-  }
-  if (b.totVal.length) {
-    rnList(sh,b.totVal,mc,1).setBackground(CLR.totBg).setFontColor(CLR.totFg)
-      .setFontWeight('bold').setFontSize(11).setNumberFormat('#,##0').setHorizontalAlignment('right');
-    bdrBatch(sh,b.totVal,mc,1,false,CLR.totBdr,BS.SOLID_MEDIUM);
-  }
-  if (b.extLbl.length) {
-    rnList(sh,b.extLbl,1,mc-1).setBackground(CLR.extBg).setFontColor(CLR.extFg)
-      .setFontStyle('italic').setHorizontalAlignment('left');
-    bdrBatch(sh,b.extLbl,1,mc-1,false,CLR.extBdr,BS.SOLID);
-  }
-  if (b.extVal.length) {
-    rnList(sh,b.extVal,mc,1).setBackground(CLR.extBg).setFontColor(CLR.extFg)
-      .setFontWeight('bold').setFontStyle('normal').setNumberFormat('#,##0').setHorizontalAlignment('right');
-    bdrBatch(sh,b.extVal,mc,1,false,CLR.extBdr,BS.SOLID);
-  }
-  if (b.sumRow.length) {
-    rnList(sh,b.sumRow,1,mc).setBackground(CLR.sumBg).setFontWeight('bold');
-    bdrBatch(sh,b.sumRow,1,mc,true,CLR.bdrMed,BS.SOLID_MEDIUM);
-  }
-  if (b.profRow.length) {
-    rnList(sh,b.profRow,1,mc).setBackground(CLR.profBg).setFontColor(CLR.profFg).setFontWeight('bold');
-    bdrBatch(sh,b.profRow,1,mc,true,'#86efac',BS.SOLID);
-  }
-  if (b.alt.length) {
-    rnList(sh,b.alt,1,mc).setBackground(CLR.alt);
-    bdrBatch(sh,b.alt,1,mc,true,CLR.bdr,BS.SOLID);
-  }
-  if (b.norm.length) {
-    rnList(sh,b.norm,1,mc).setBackground('#ffffff');
-    bdrBatch(sh,b.norm,1,mc,true,CLR.bdr,BS.SOLID);
-  }
-  if (numCells.length) {
-    sh.getRangeList(numCells.map(function(c){ return sh.getRange(c[0],c[1]).getA1Notation(); }))
-      .setNumberFormat('#,##0').setHorizontalAlignment('right');
-  }
-  if (ctrCells.length) {
-    sh.getRangeList(ctrCells.map(function(c){ return sh.getRange(c[0],c[1]).getA1Notation(); }))
-      .setHorizontalAlignment('center');
-  }
+  if(b.alt.length)        { rnList(sh,b.alt,1,mc).setBackground(CLR.alt); bdrBatch(sh,b.alt,1,mc,true,CLR.bdr,BS.SOLID); }
+  if(b.norm.length)       { rnList(sh,b.norm,1,mc).setBackground('#ffffff'); bdrBatch(sh,b.norm,1,mc,true,CLR.bdr,BS.SOLID); }
+  if(numCells.length)     { sh.getRangeList(numCells.map(function(c){ return sh.getRange(c[0],c[1]).getA1Notation(); })).setNumberFormat('#,##0').setHorizontalAlignment('right'); }
+  if(ctrCells.length)     { sh.getRangeList(ctrCells.map(function(c){ return sh.getRange(c[0],c[1]).getA1Notation(); })).setHorizontalAlignment('center'); }
 
-  // 5. Row heights
+  // Row heights
   b.blank.forEach(function(rn){ sh.setRowHeight(rn,6); });
-  Object.keys(heights).forEach(function(rn){ sh.setRowHeight(parseInt(rn), heights[rn]); });
+  Object.keys(heights).forEach(function(rn){ sh.setRowHeight(parseInt(rn),heights[rn]); });
 
-  // 6. Column widths
-  sh.setColumnWidth(1, isProj ? 230 : 200);
-  for (var c = 2; c <= mc; c++) {
-    sh.setColumnWidth(c, c <= 8 ? 65 : 115);
+  // Column widths — col1: 220px (tên thợ/nội dung), T2-CN: 55px, Tổng: 60px, Lương: 100px, Tiền: 120px
+  sh.setColumnWidth(1, isProj ? 220 : 200);
+  for(var c=2;c<=mc;c++){
+    if(c<=8)       sh.setColumnWidth(c,55);
+    else if(c===9) sh.setColumnWidth(c,60);
+    else if(c===mc)sh.setColumnWidth(c,120);
+    else           sh.setColumnWidth(c,100);
   }
 
-  // 6b. Wrap + tăng chiều cao cho cột 1 (tránh mất chữ)
-  sh.getRange(1, 1, norm.length, 1).setWrap(true);
-  if (b.extLbl.length) {
-    rnList(sh, b.extLbl, 1, mc-1).setWrap(true);
-    b.extLbl.forEach(function(rn){ sh.setRowHeight(rn, 28); });
-  }
-  if (b.norm.length)   b.norm.forEach(function(rn){ sh.setRowHeight(rn, 24); });
-  if (b.alt.length)    b.alt.forEach(function(rn){ sh.setRowHeight(rn, 24); });
+  // Wrap toàn bộ để không bị mất chữ
+  sh.getRange(1,1,norm.length,maxCols).setWrap(true);
 
-  // 7. Freeze
   sh.setFrozenRows(2);
-  if (isProj) { try { sh.setFrozenColumns(1); } catch(fe){} }
+  if(isProj){ try{ sh.setFrozenColumns(1); }catch(fe){} }
 }
 
-function testSync() { Logger.log('GAS OK v4 – ' + new Date()); }`;
+function testSync() { Logger.log('GAS OK v5 – ' + new Date()); }\`;
 }
 
 function doSavesSheetsUrl() {
