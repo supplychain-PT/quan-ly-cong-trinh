@@ -3099,8 +3099,6 @@ function writeSheet(sh, sd) {
         var hT=maxCols;
         for(var j=maxCols-2;j>=2;j--){ if(row[j]===''||row[j]===null||row[j]===undefined) hT=j+1; else break; }
         if(hT<maxCols && maxCols-hT>=2) merges.push([rn,hT,maxCols-hT]);
-        // Gộp D+E cho header bảng chi phí (col D có chữ, col E rỗng)
-        if(isProj && row.length>=5 && (row[3]!==''&&row[3]!==null&&row[3]!==undefined) && (row[4]===''||row[4]===null||row[4]===undefined)) merges.push([rn,4,2]);
       }
       return;
     }
@@ -3161,11 +3159,6 @@ function writeSheet(sh, sd) {
         if(tv===''||tv===null||tv===undefined){ tS=k; } else { break; }
       }
       if(tS>=3 && maxCols-1-tS>=2) merges.push([rn,tS+1,maxCols-1-tS]);
-    }
-    // Gộp D+E cho dữ liệu chi phí chi tiết (col D có loại, col E rỗng)
-    if (isProj && Array.isArray(row) && row.length>=5) {
-      var d3=row[3], d4=row[4];
-      if((d3!==''&&d3!==null&&d3!==undefined)&&(d4===''||d4===null||d4===undefined)) merges.push([rn,4,2]);
     }
   });
 
