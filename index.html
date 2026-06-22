@@ -2961,6 +2961,11 @@ function mSheetsSync() {
     <button class="btn btn-success" style="width:100%;padding:13px;font-size:14px;margin-bottom:8px;" onclick="doSyncToSheets(true)">
         📤 Đồng bộ ngay lên Sheets
     </button>
+    <details style="margin-bottom:8px;">
+        <summary style="font-size:12px;color:var(--primary);cursor:pointer;font-weight:600;">📋 Xem code Google Apps Script (v5)</summary>
+        <pre id="gas-code-conn" style="font-size:10px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:10px;margin-top:8px;overflow-x:auto;white-space:pre-wrap;max-height:180px;overflow-y:auto;">${esc(getGASCode())}</pre>
+        <button onclick="navigator.clipboard.writeText(getGASCode()).then(()=>alert('✅ Đã copy code GAS v5!'))" style="margin-top:6px;font-size:11px;padding:4px 10px;border:1px solid var(--primary);color:var(--primary);background:none;border-radius:6px;cursor:pointer;">📋 Copy code</button>
+    </details>
     <div class="modal-footer" style="justify-content:space-between;margin-top:8px;">
         <button class="btn btn-ghost btn-sm" onclick="doRemoveSheetsUrl()" style="color:var(--danger);">🔌 Ngắt kết nối</button>
         <button class="btn btn-outline" onclick="closeModal()">Đóng</button>
