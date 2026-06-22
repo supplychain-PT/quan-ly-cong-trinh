@@ -3014,19 +3014,19 @@ function syncSheets(data) {
   });
 }
 
-// Bảng màu — xanh dương & xanh lá
+// Bảng màu — Phương án A: Navy & Teal
 var CLR = {
-  navyBg:'#0d2137', navyFg:'#ffffff',         // tiêu đề công trình: navy đậm
-  secBg:'#1565c0',  secFg:'#ffffff',           // section header: xanh dương đậm
-  wkBg:'#e3f2fd',   wkFg:'#0d47a1',           // tuần: xanh dương nhạt
-  colHdrBg:'#006064', colHdrFg:'#ffffff',      // col header: teal (thay xám)
-  totBg:'#e8f5e9',  totFg:'#1b5e20',  totBdr:'#66bb6a', // tổng tuần: xanh lá
-  extBg:'#f1f8e9',  extFg:'#33691e',  extBdr:'#aed581', // phát sinh: xanh lá nhạt
-  profBg:'#c8e6c9', profFg:'#1b5e20',          // lợi nhuận: xanh lá trung
-  sumBg:'#bbdefb',                              // tổng chi phí/tạm ứng: xanh dương nhạt
-  infoBg:'#e3f2fd', infoFg:'#0d47a1',          // info row: xanh dương nhạt
-  alt:'#f0f7ff',                               // hàng xen kẽ: xanh rất nhạt
-  bdr:'#90caf9',    bdrMed:'#1976d2'           // border: xanh dương
+  navyBg:'#0a2240', navyFg:'#ffffff',          // tiêu đề: navy đậm
+  secBg:'#1565c0',  secFg:'#ffffff',            // section: xanh dương đậm
+  wkBg:'#01579b',   wkFg:'#ffffff',             // tuần: xanh dương đậm + trắng
+  colHdrBg:'#006064', colHdrFg:'#ffffff',       // col header: teal đậm
+  totBg:'#1b5e20',  totFg:'#ffffff', totBdr:'#2e7d32', // TỔNG TUẦN: xanh lá đậm + trắng
+  extBg:'#e8f5e9',  extFg:'#2e7d32', extBdr:'#a5d6a7', // phát sinh: xanh lá nhạt
+  profBg:'#2e7d32', profFg:'#ffffff',           // lợi nhuận: xanh lá đậm + trắng
+  sumBg:'#0d47a1',                              // tổng chi phí: xanh dương đậm
+  infoBg:'#e3f2fd', infoFg:'#0d47a1',           // info row: xanh dương nhạt
+  alt:'#e8f4fd',                                // hàng xen kẽ: xanh dương nhạt
+  bdr:'#90caf9',    bdrMed:'#1565c0'            // border: xanh dương
 };
 
 // Helper: getRangeList từ danh sách row numbers
@@ -3166,30 +3166,30 @@ function writeSheet(sh, sd) {
   merges.forEach(function(m){ try{ sh.getRange(m[0],m[1],1,m[2]).merge(); }catch(me){} });
 
   var mc = maxCols;
-  if(b.navy.length)       { rnList(sh,b.navy,1,mc).setBackground(CLR.navyBg).setFontColor(CLR.navyFg).setFontWeight('bold').setHorizontalAlignment('center').setFontSize(isProj?14:13); bdrBatch(sh,b.navy,1,mc,false,'#051624',BS.SOLID_MEDIUM); }
-  if(b.info.length)       { rnList(sh,b.info,1,mc).setBackground(CLR.infoBg).setFontColor(CLR.infoFg).setFontStyle('italic').setWrap(true); bdrBatch(sh,b.info,1,mc,true,CLR.bdr,BS.SOLID); }
+  if(b.navy.length)       { rnList(sh,b.navy,1,mc).setBackground(CLR.navyBg).setFontColor(CLR.navyFg).setFontWeight('bold').setHorizontalAlignment('center').setFontSize(isProj?14:13); bdrBatch(sh,b.navy,1,mc,false,'#040f1a',BS.SOLID_MEDIUM); }
+  if(b.info.length)       { rnList(sh,b.info,1,mc).setBackground(CLR.infoBg).setFontColor(CLR.infoFg).setFontStyle('italic').setWrap(true); bdrBatch(sh,b.info,1,mc,true,'#64b5f6',BS.SOLID); }
   if(b.colHdr.length)     { rnList(sh,b.colHdr,1,mc).setBackground(CLR.colHdrBg).setFontColor(CLR.colHdrFg).setFontWeight('bold').setFontSize(10).setHorizontalAlignment('center').setWrap(true); bdrBatch(sh,b.colHdr,1,mc,true,'#004d40',BS.SOLID_MEDIUM); }
   if(b.secHdr.length)     { rnList(sh,b.secHdr,1,mc).setBackground(CLR.secBg).setFontColor(CLR.secFg).setFontWeight('bold').setFontSize(11).setHorizontalAlignment('left'); bdrBatch(sh,b.secHdr,1,mc,false,'#0d47a1',BS.SOLID_MEDIUM); }
-  if(b.wkHdr.length)      { rnList(sh,b.wkHdr,1,mc).setBackground(CLR.wkBg).setFontColor(CLR.wkFg).setFontWeight('bold').setFontSize(11).setHorizontalAlignment('left'); bdrBatch(sh,b.wkHdr,1,mc,false,'#42a5f5',BS.SOLID); }
-  if(b.expTypeHdr.length) { rnList(sh,b.expTypeHdr,1,mc).setBackground('#e8f5e9').setFontColor('#2e7d32').setFontWeight('bold').setFontSize(10).setHorizontalAlignment('left'); bdrBatch(sh,b.expTypeHdr,1,mc,false,'#81c784',BS.SOLID); }
+  if(b.wkHdr.length)      { rnList(sh,b.wkHdr,1,mc).setBackground(CLR.wkBg).setFontColor(CLR.wkFg).setFontWeight('bold').setFontSize(11).setHorizontalAlignment('left'); bdrBatch(sh,b.wkHdr,1,mc,false,'#01579b',BS.SOLID_MEDIUM); }
+  if(b.expTypeHdr.length) { rnList(sh,b.expTypeHdr,1,mc).setBackground('#e8f5e9').setFontColor('#1b5e20').setFontWeight('bold').setFontSize(10).setHorizontalAlignment('left'); bdrBatch(sh,b.expTypeHdr,1,mc,false,'#66bb6a',BS.SOLID); }
   if(b.totLbl.length)     { rnList(sh,b.totLbl,1,mc-1).setBackground(CLR.totBg).setFontColor(CLR.totFg).setFontWeight('bold').setFontSize(11).setHorizontalAlignment('left'); bdrBatch(sh,b.totLbl,1,mc-1,false,CLR.totBdr,BS.SOLID_MEDIUM); }
   if(b.totVal.length)     { rnList(sh,b.totVal,mc,1).setBackground(CLR.totBg).setFontColor(CLR.totFg).setFontWeight('bold').setFontSize(11).setNumberFormat('#,##0').setHorizontalAlignment('right'); bdrBatch(sh,b.totVal,mc,1,false,CLR.totBdr,BS.SOLID_MEDIUM); }
   if(b.extLbl.length)     { rnList(sh,b.extLbl,1,mc-1).setBackground(CLR.extBg).setFontColor(CLR.extFg).setFontStyle('italic').setHorizontalAlignment('left').setWrap(true); bdrBatch(sh,b.extLbl,1,mc-1,false,CLR.extBdr,BS.DASHED); }
   if(b.extVal.length)     { rnList(sh,b.extVal,mc,1).setBackground(CLR.extBg).setFontColor(CLR.extFg).setFontWeight('bold').setFontStyle('normal').setNumberFormat('#,##0').setHorizontalAlignment('right'); bdrBatch(sh,b.extVal,mc,1,false,CLR.extBdr,BS.DASHED); }
   if(b.sumRow.length)     {
-    rnList(sh,b.sumRow,1,mc).setBackground(CLR.sumBg).setFontColor('#0d47a1').setFontWeight('bold').setFontSize(11).setHorizontalAlignment('left');
-    bdrBatch(sh,b.sumRow,1,mc,false,CLR.bdrMed,BS.SOLID_MEDIUM);
+    rnList(sh,b.sumRow,1,mc).setBackground(CLR.sumBg).setFontColor('#ffffff').setFontWeight('bold').setFontSize(11).setHorizontalAlignment('left');
+    bdrBatch(sh,b.sumRow,1,mc,false,'#0d47a1',BS.SOLID_MEDIUM);
   }
   if(b.profRow.length)    {
     rnList(sh,b.profRow,1,mc).setBackground(CLR.profBg).setFontColor(CLR.profFg).setFontWeight('bold').setFontSize(11).setHorizontalAlignment('left');
-    bdrBatch(sh,b.profRow,1,mc,false,'#43a047',BS.SOLID_MEDIUM);
+    bdrBatch(sh,b.profRow,1,mc,false,'#1b5e20',BS.SOLID_MEDIUM);
   }
   if(b.finRow.length)     {
-    rnList(sh,b.finRow,1,mc).setBackground('#e3f2fd').setFontColor('#0d47a1').setFontWeight('bold').setFontSize(11).setHorizontalAlignment('left');
+    rnList(sh,b.finRow,1,mc).setBackground('#bbdefb').setFontColor('#0d47a1').setFontWeight('bold').setFontSize(11).setHorizontalAlignment('left');
     bdrBatch(sh,b.finRow,1,mc,false,CLR.bdr,BS.SOLID);
   }
   if(b.finSub.length)     {
-    rnList(sh,b.finSub,1,mc).setBackground('#f0f7ff').setFontColor('#1565c0').setFontStyle('italic').setHorizontalAlignment('left');
+    rnList(sh,b.finSub,1,mc).setBackground('#e3f2fd').setFontColor('#1565c0').setFontStyle('italic').setHorizontalAlignment('left');
     bdrBatch(sh,b.finSub,1,mc,false,CLR.bdr,BS.DASHED);
   }
   if(b.alt.length)        { rnList(sh,b.alt,1,mc).setBackground(CLR.alt); bdrBatch(sh,b.alt,1,mc,true,CLR.bdr,BS.SOLID); }
