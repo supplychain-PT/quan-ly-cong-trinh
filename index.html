@@ -3197,7 +3197,7 @@ function writeSheet(sh, sd) {
 
   // 7. Freeze
   sh.setFrozenRows(2);
-  if (isProj) sh.setFrozenColumns(1);
+  if (isProj) { try { sh.setFrozenColumns(1); } catch(fe){} }
 }
 
 function testSync() { Logger.log('GAS OK v2 – ' + new Date()); }`;
