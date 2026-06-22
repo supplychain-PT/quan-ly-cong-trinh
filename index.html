@@ -2832,8 +2832,10 @@ function buildSheetsPayload() {
                 regW.forEach(w => {
                     const attCols = dayStrs.map(d => { const v=getAttVal(p,w.id,d); return v?v:''; });
                     const totalDays = dayStrs.reduce((s,d)=>s+getAttVal(p,w.id,d),0);
-                    const money = weekLaborWorker(p,w,days) + getWorkerSupport(p,w.id,ws);
+                    const sup = getWorkerSupport(p, w.id, ws);
+                    const money = weekLaborWorker(p,w,days) + sup;
                     rows.push([w.name||'', ...attCols, totalDays, fmt(effectiveWage(w,ws)), fmt(money)]);
+                    if (sup > 0) rows.push([`+ Hỗ trợ: ${w.name||''}`, ...blank7(), '', '', fmt(sup)]);
                 });
 
                 // Thợ ngoài (có tên)
