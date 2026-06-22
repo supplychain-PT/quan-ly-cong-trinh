@@ -3189,18 +3189,27 @@ function writeSheet(sh, sd) {
   b.blank.forEach(function(rn){ sh.setRowHeight(rn,6); });
   Object.keys(heights).forEach(function(rn){ sh.setRowHeight(parseInt(rn), heights[rn]); });
 
-  // 6. Column widths (fixed - no autoResize to avoid timeout)
-  sh.setColumnWidth(1, 185);
+  // 6. Column widths
+  sh.setColumnWidth(1, isProj ? 230 : 200);
   for (var c = 2; c <= mc; c++) {
-    sh.setColumnWidth(c, c <= 8 ? 58 : 100);
+    sh.setColumnWidth(c, c <= 8 ? 65 : 115);
   }
+
+  // 6b. Wrap + tăng chiều cao cho cột 1 (tránh mất chữ)
+  sh.getRange(1, 1, norm.length, 1).setWrap(true);
+  if (b.extLbl.length) {
+    rnList(sh, b.extLbl, 1, mc-1).setWrap(true);
+    b.extLbl.forEach(function(rn){ sh.setRowHeight(rn, 28); });
+  }
+  if (b.norm.length)   b.norm.forEach(function(rn){ sh.setRowHeight(rn, 24); });
+  if (b.alt.length)    b.alt.forEach(function(rn){ sh.setRowHeight(rn, 24); });
 
   // 7. Freeze
   sh.setFrozenRows(2);
   if (isProj) { try { sh.setFrozenColumns(1); } catch(fe){} }
 }
 
-function testSync() { Logger.log('GAS OK v2 – ' + new Date()); }`;
+function testSync() { Logger.log('GAS OK v4 – ' + new Date()); }`;
 }
 
 function doSavesSheetsUrl() {
