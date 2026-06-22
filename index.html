@@ -2794,26 +2794,14 @@ function buildSheetsPayload() {
         const weeks = [...wsSet].sort();
 
         const rows = [];
-        const PR   = 11; // số cột cố định cho project sheet (khớp với attendance 1+7+3)
+        const PR   = 11;
         const pad  = arr => { const r=[...arr]; while(r.length<PR) r.push(''); return r; };
-        // fRow: nhãn ở cột 1, giá trị ở cột cuối (cột 11), giữa để trống → GAS tự merge
-        const fRow = (lbl, val) => { const r=[lbl]; while(r.length<PR-1) r.push(''); r.push(val??''); return r; };
-        const fSub = (lbl, val) => fRow('  • '+lbl, val); // sub-item thụt lề
+        // mRow: cột A rỗng, cột B = nhãn, cột C = giá trị
+        const mRow = (lbl, val) => pad(['', lbl||'', val??'']);
 
         // ── Tiêu đề
         rows.push([`CÔNG TRÌNH: ${p.name||''}`]);
         rows.push(['Trạng thái', status, 'Từ ngày', p.startDate||'', p.endDate?`→ ${p.endDate}`:'-']);
-        rows.push([]);
-
-        // ── Tổng quan tài chính (giá trị ở cột 11 = 120px, đủ rộng cho mọi số)
-        rows.push(['TỔNG QUAN TÀI CHÍNH']);
-        rows.push(fRow('Chi phí nhân công', fmt(lc)));
-        if(cc) rows.push(fSub('Đội Thi Công', fmt(cc)));
-        if(oc) rows.push(fSub('CP Tại Công Trình', fmt(oc)));
-        if(mc) rows.push(fSub('Chi Vật Tư', fmt(mc)));
-        rows.push(fRow('Tổng chi phí', fmt(tc)));
-        rows.push(fRow('Tạm ứng từ chủ nhà', fmt(adv)));
-        rows.push(fRow(adv>=tc?'Lợi nhuận ✅':'Chênh lệch ⚠️', fmt(adv-tc)));
         rows.push([]);
 
         // ── Chấm công theo tuần
@@ -2879,39 +2867,42 @@ function buildSheetsPayload() {
             });
         }
 
-        // ── Chi phí chi tiết
-        // Cột 1 (220px) = Nội dung, cột 11 (120px) = Số tiền → không bị mất chữ
-        const EXP_ORD = {contractor:0, other:1, material:2};
-        const exps = [...(p.expenses||[])].sort((a,b)=>{
-            const ta=EXP_ORD[a.type]??99, tb=EXP_ORD[b.type]??99;
-            if(ta!==tb) return ta-tb;
-            return a.date>b.date?1:a.date<b.date?-1:0;
-        });
-        rows.push(['CHI PHÍ CHI TIẾT']);
+        // ── B. Chi phí chi tiết — sắp xếp theo ngày
+        const exps = [...(p.expenses||[])].sort((a,b)=>(a.date||'')>(b.date||'')?1:(a.date||'')<(b.date||'')?-1:0);
+        rows.push(['B.  CHI PHÍ CHI TIẾT']);
         if(!exps.length) {
             rows.push(pad(['(Chưa có chi phí)']));
         } else {
-            rows.push(pad(['Nội dung', 'STT', 'Ngày', 'Loại chi phí', '', 'Người chi', 'Ghi chú', '', '', '', 'Số tiền (đ)']));
-            let prevExpType = null, sttNum = 1;
+            rows.push(pad(['Ngày', 'Mô Tả Chi Phí', 'Số Tiền', 'Người Chi', 'Loại']));
             exps.forEach(e => {
-                if (e.type !== prevExpType) {
-                    prevExpType = e.type;
-                    const EXP_GRP = {contractor:'👷 ĐỘI THI CÔNG', other:'🏗 CP TẠI CÔNG TRÌNH', material:'🧱 CHI VẬT TƯ'};
-                    rows.push(pad([EXP_GRP[e.type]||e.type]));
-                }
-                rows.push(pad([e.desc||'', sttNum++, e.date||'', expLabel(e.type), '', e.payer||'', e.note||'', '', '', '', fmt(e.amount||0)]));
+                rows.push(pad([e.date||'', e.desc||'', e.amount||0, e.payer||'', expLabel(e.type)]));
             });
-            rows.push(fRow('Tổng chi phí', fmt(mc+cc+oc)));
+            rows.push(mRow('Tổng chi phí', mc+cc+oc));
         }
         rows.push([]);
 
-        // ── Tạm ứng chủ nhà
+        // ── C. Tổng quan tài chính
+        const bal = adv - tc;
+        rows.push(['C.  TỔNG QUAN TÀI CHÍNH']);
+        rows.push(pad(['▶ THU']));
+        rows.push(mRow('Tạm ứng chủ nhà', adv));
+        rows.push(pad(['▶ CHI']));
+        rows.push(mRow('Nhân công', lc));
+        if(cc) rows.push(mRow('Đội thi công', cc));
+        if(mc) rows.push(mRow('Chi vật tư', mc));
+        if(oc) rows.push(mRow('CP tại công trình', oc));
+        rows.push(mRow(bal >= 0 ? 'Lợi nhuận ✅' : 'Công ty còn nợ', bal));
+        rows.push([]);
+
+        // ── D. Tạm ứng chủ nhà
         const advs = [...(p.advances||[])].sort((a,b)=>a.date>b.date?1:-1);
-        if(advs.length) {
-            rows.push(['TẠM ỨNG CHỦ NHÀ']);
-            rows.push(pad(['Ghi chú', 'STT', 'Ngày', '', '', '', '', '', '', '', 'Số tiền (đ)']));
-            advs.forEach((a,i) => rows.push(pad([a.note||`Đợt ${i+1}`, i+1, a.date||'', '', '', '', '', '', '', '', fmt(a.amount||0)])));
-            rows.push(fRow('Tổng tạm ứng', fmt(adv)));
+        rows.push(['D.  TẠM ỨNG CHỦ NHÀ']);
+        if(!advs.length) {
+            rows.push(pad(['(Chưa có tạm ứng)']));
+        } else {
+            rows.push(pad(['Ngày', 'Ghi Chú', 'Số Tiền']));
+            advs.forEach(a => rows.push(pad([a.date||'', a.note||'', a.amount||0])));
+            rows.push(mRow('Tổng tạm ứng', adv));
         }
 
         return { name:(p.name||'CT').slice(0,31), type:'project', rows };
@@ -3071,7 +3062,7 @@ function writeSheet(sh, sd) {
 
   var isProj = sd.type === 'project';
   var BS = SpreadsheetApp.BorderStyle;
-  var SECS = ['TỔNG QUAN TÀI CHÍNH','CHẤM CÔNG THEO TUẦN','CHI PHÍ CHI TIẾT','TẠM ỨNG CHỦ NHÀ'];
+  var SECS = ['CHI PHÍ CHI TIẾT','TỔNG QUAN TÀI CHÍNH','TẠM ỨNG CHỦ NHÀ','CHẤM CÔNG THEO TUẦN'];
 
   var b = { navy:[], info:[], colHdr:[], secHdr:[], wkHdr:[],
             totLbl:[], totVal:[], extLbl:[], extVal:[],
@@ -3082,6 +3073,7 @@ function writeSheet(sh, sd) {
   rows.forEach(function(row, i) {
     var rn = i + 1;
     var c0 = String(Array.isArray(row) ? (row[0]||'') : (row||''));
+    var c1 = (Array.isArray(row) && row.length>=2) ? String(row[1]||'') : '';
     var empty = !Array.isArray(row) || row.every(function(v){ return !v && v !== 0; });
     if (empty) { b.blank.push(rn); return; }
 
@@ -3091,7 +3083,7 @@ function writeSheet(sh, sd) {
       else       { b.colHdr.push(rn); heights[rn]=34; }
       return;
     }
-    if (SECS.indexOf(c0)>=0) { b.secHdr.push(rn); merges.push([rn,1,maxCols]); heights[rn]=30; altRow=false; return; }
+    if (SECS.some(function(s){ return c0.indexOf(s)>=0; })) { b.secHdr.push(rn); merges.push([rn,1,maxCols]); heights[rn]=30; altRow=false; return; }
     if (c0.indexOf('Tuần:')===0) { b.wkHdr.push(rn); merges.push([rn,1,maxCols]); heights[rn]=28; altRow=false; return; }
 
     // Expense type group headers (emoji-prefixed: 👷 🏗 🧱)
@@ -3101,7 +3093,7 @@ function writeSheet(sh, sd) {
     }
 
     // Column headers — merge trailing empty cols to clean up layout
-    if (c0==='Tên thợ'||c0==='STT'||c0==='Nội dung'||c0==='Ghi chú') {
+    if (c0==='Tên thợ'||c0==='STT'||c0==='Nội dung'||c0==='Ghi chú'||c0==='Ngày') {
       b.colHdr.push(rn); heights[rn]=(c0==='Tên thợ')?38:30;
       if (Array.isArray(row) && maxCols>=7 && c0!=='Tên thợ') {
         var hT=maxCols;
@@ -3120,14 +3112,17 @@ function writeSheet(sh, sd) {
       b.extLbl.push(rn); merges.push([rn,1,maxCols-1]);
       b.extVal.push(rn); heights[rn]=24; return;
     }
-    if (c0==='Tổng chi phí'||c0==='Tổng tạm ứng') {
-      b.sumRow.push(rn); merges.push([rn,1,maxCols-1]); heights[rn]=28;
-      if(Array.isArray(row)&&typeof row[maxCols-1]==='number') numCells.push([rn,maxCols]);
+    if (c0==='Tổng chi phí'||c0==='Tổng tạm ứng'||c1==='Tổng chi phí'||c1==='Tổng tạm ứng') {
+      b.sumRow.push(rn); heights[rn]=28;
+      if(isProj && c0==='') { merges.push([rn,1,2]); merges.push([rn,4,maxCols-3]); if(Array.isArray(row)&&typeof row[2]==='number') numCells.push([rn,3]); }
+      else { merges.push([rn,1,maxCols-1]); if(Array.isArray(row)&&typeof row[maxCols-1]==='number') numCells.push([rn,maxCols]); }
       return;
     }
-    if (c0.indexOf('Lợi nhuận')===0||c0.indexOf('Chênh lệch')===0) {
-      b.profRow.push(rn); merges.push([rn,1,maxCols-1]); heights[rn]=28;
-      if(Array.isArray(row)&&typeof row[maxCols-1]==='number') numCells.push([rn,maxCols]);
+    if (c0.indexOf('Lợi nhuận')===0||c0.indexOf('Chênh lệch')===0||
+        c1.indexOf('Lợi nhuận')===0||c1.indexOf('Chênh lệch')===0||c1.indexOf('Công ty còn nợ')===0) {
+      b.profRow.push(rn); heights[rn]=28;
+      if(isProj && c0==='') { merges.push([rn,1,2]); merges.push([rn,4,maxCols-3]); if(Array.isArray(row)&&typeof row[2]==='number') numCells.push([rn,3]); }
+      else { merges.push([rn,1,maxCols-1]); if(Array.isArray(row)&&typeof row[maxCols-1]==='number') numCells.push([rn,maxCols]); }
       return;
     }
 
@@ -3158,14 +3153,14 @@ function writeSheet(sh, sd) {
         }
       });
     }
-    // Gộp cột rỗng ở đuôi (từ cột 7 trở đi) cho bảng chi phí / tạm ứng
-    if (maxCols>=9 && Array.isArray(row) && row.length>=maxCols) {
+    // Gộp cột rỗng ở đuôi (từ cột 4 trở đi) — bao gồm cả D,E,F cho bảng tài chính/tạm ứng
+    if (maxCols>=5 && Array.isArray(row) && row.length>=maxCols) {
       var tS=-1;
-      for(var k=maxCols-2;k>=6;k--){
+      for(var k=maxCols-2;k>=3;k--){
         var tv=row[k];
         if(tv===''||tv===null||tv===undefined){ tS=k; } else { break; }
       }
-      if(tS>=6 && maxCols-1-tS>=1) merges.push([rn,tS+1,maxCols-1-tS]);
+      if(tS>=3 && maxCols-1-tS>=2) merges.push([rn,tS+1,maxCols-1-tS]);
     }
     // Gộp D+E cho dữ liệu chi phí chi tiết (col D có loại, col E rỗng)
     if (isProj && Array.isArray(row) && row.length>=5) {
@@ -3217,13 +3212,15 @@ function writeSheet(sh, sd) {
   b.blank.forEach(function(rn){ sh.setRowHeight(rn,6); });
   Object.keys(heights).forEach(function(rn){ sh.setRowHeight(parseInt(rn),heights[rn]); });
 
-  // Column widths — col1: 220px (tên thợ/nội dung), T2-CN: 55px, Tổng: 60px, Lương: 100px, Tiền: 120px
-  sh.setColumnWidth(1, isProj ? 220 : 200);
-  for(var c=2;c<=mc;c++){
-    if(c<=8)       sh.setColumnWidth(c,55);
-    else if(c===9) sh.setColumnWidth(c,60);
-    else if(c===mc)sh.setColumnWidth(c,120);
-    else           sh.setColumnWidth(c,100);
+  // Column widths: A=Ngày/Tên thợ, B=Mô Tả/T2, C=Số Tiền/T3, D=Người Chi/T4, E=Loại/T5, F-J=55, K=Thành tiền
+  if (isProj) {
+    sh.setColumnWidth(1,110); sh.setColumnWidth(2,190); sh.setColumnWidth(3,110);
+    sh.setColumnWidth(4,100); sh.setColumnWidth(5,110);
+    for(var cw=6;cw<=mc-1;cw++) sh.setColumnWidth(cw,55);
+    sh.setColumnWidth(mc,110);
+  } else {
+    sh.setColumnWidth(1,200);
+    for(var cw=2;cw<=mc;cw++) sh.setColumnWidth(cw,cw<=4?120:100);
   }
 
   // Wrap toàn bộ để không bị mất chữ
