@@ -2751,13 +2751,33 @@ function buildSheetsPayload() {
     const expLabel = t => t==='contractor'?'Đội Thi Công': t==='other'?'CP Tại Công Trình': 'Chi Vật Tư';
     const blank7   = () => Array(7).fill('');
 
-    // ── Sheet 1: Danh sách thợ ────────────────────────────
+    // ── Sheet 1: Danh sách thợ + lịch sử tăng lương ───────
+    const wageChanges = [];
+    S.workers.forEach(w => {
+        const hist = [...(w.wageHistory||[])].sort((a,b)=>a.from.localeCompare(b.from));
+        hist.forEach((h, idx) => {
+            if (idx > 0) {
+                const prev = hist[idx-1];
+                wageChanges.push({ name:w.name||'', from:h.from, oldWage:prev.wage, newWage:h.wage, note:h.note||'' });
+            }
+        });
+    });
+    wageChanges.sort((a,b)=>a.from.localeCompare(b.from));
     const workerSheet = {
         name: 'Danh sách thợ', type: 'workers',
         rows: [
             [`DANH SÁCH THỢ · Cập nhật: ${now}`],
-            ['STT', 'Họ tên', 'Chức vụ / Vai trò', 'Lương/ngày (đ)'],
-            ...S.workers.map((w,i) => [i+1, w.name||'', w.role||'', fmt(w.wage||0)])
+            ['STT', 'Họ tên', 'Chức vụ / Vai trò', 'Lương hiện tại (đ)', 'Ngày bắt đầu'],
+            ...S.workers.map((w,i) => {
+                const hist = [...(w.wageHistory||[])].sort((a,b)=>a.from.localeCompare(b.from));
+                return [i+1, w.name||'', w.role||'', fmt(w.wage||0), hist.length ? df(hist[0].from) : ''];
+            }),
+            [],
+            ['LỊCH SỬ TĂNG LƯƠNG'],
+            ...(wageChanges.length
+                ? [['Tên thợ', 'Ngày hiệu lực', 'Lương cũ (đ)', 'Lương mới (đ)', 'Ghi chú'],
+                   ...wageChanges.map(c=>[c.name, df(c.from), fmt(c.oldWage), fmt(c.newWage), c.note])]
+                : [['(Chưa có lần tăng lương nào)']])
         ]
     };
 
@@ -3062,7 +3082,7 @@ function writeSheet(sh, sd) {
 
   var isProj = sd.type === 'project';
   var BS = SpreadsheetApp.BorderStyle;
-  var SECS = ['CHI PHÍ CHI TIẾT','TỔNG QUAN TÀI CHÍNH','TẠM ỨNG CHỦ NHÀ','CHẤM CÔNG THEO TUẦN'];
+  var SECS = ['CHI PHÍ CHI TIẾT','TỔNG QUAN TÀI CHÍNH','TẠM ỨNG CHỦ NHÀ','CHẤM CÔNG THEO TUẦN','LỊCH SỬ TĂNG LƯƠNG','DANH SÁCH THỢ'];
 
   var b = { navy:[], info:[], colHdr:[], secHdr:[], wkHdr:[],
             totLbl:[], totVal:[], extLbl:[], extVal:[],
@@ -3151,8 +3171,10 @@ function writeSheet(sh, sd) {
         }
       });
     }
-    // Gộp cột rỗng ở đuôi (từ cột 4 trở đi) — bao gồm cả D,E,F cho bảng tài chính/tạm ứng
-    if (maxCols>=5 && Array.isArray(row) && row.length>=maxCols) {
+    // Gộp cột rỗng ở đuôi — chỉ áp dụng cho hàng tài chính (cột A là ngày hoặc rỗng)
+    // KHÔNG áp dụng cho hàng chấm công (cột A là tên thợ)
+    var isFinRow = (c0==='' || /^\d{2}\/\d{2}\/\d{4}$/.test(c0) || /^\d{4}-\d{2}-\d{2}$/.test(c0));
+    if (isProj && isFinRow && maxCols>=5 && Array.isArray(row) && row.length>=maxCols) {
       var tS=-1;
       for(var k=maxCols-2;k>=3;k--){
         var tv=row[k];
