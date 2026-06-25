@@ -3041,17 +3041,17 @@ function syncSheets(data) {
 
 // Bảng màu — Phương án A: Navy & Teal
 var CLR = {
-  navyBg:'#0a2240', navyFg:'#ffffff',          // tiêu đề: navy đậm
-  secBg:'#1565c0',  secFg:'#ffffff',            // section: xanh dương đậm
-  wkBg:'#01579b',   wkFg:'#ffffff',             // tuần: xanh dương đậm + trắng
-  colHdrBg:'#006064', colHdrFg:'#ffffff',       // col header: teal đậm
-  totBg:'#1b5e20',  totFg:'#ffffff', totBdr:'#2e7d32', // TỔNG TUẦN: xanh lá đậm + trắng
-  extBg:'#e8f5e9',  extFg:'#2e7d32', extBdr:'#a5d6a7', // phát sinh: xanh lá nhạt
-  profBg:'#2e7d32', profFg:'#ffffff',           // lợi nhuận: xanh lá đậm + trắng
-  sumBg:'#0d47a1',                              // tổng chi phí: xanh dương đậm
-  infoBg:'#e3f2fd', infoFg:'#0d47a1',           // info row: xanh dương nhạt
-  alt:'#e8f4fd',                                // hàng xen kẽ: xanh dương nhạt
-  bdr:'#90caf9',    bdrMed:'#1565c0'            // border: xanh dương
+  navyBg:'#1f3864', navyFg:'#ffffff',           // tiêu đề: navy đậm
+  secBg:'#1f3864',  secFg:'#ffffff',             // section C/D/B/A: navy đậm
+  wkBg:'#2e75b6',   wkFg:'#ffffff',             // tuần header: xanh dương vừa
+  colHdrBg:'#4472c4', colHdrFg:'#ffffff',        // col header: xanh dương
+  totBg:'#fce4d6',  totFg:'#833c00', totBdr:'#f4b183', // TỔNG TUẦN: be cam nhạt
+  extBg:'#dae3f3',  extFg:'#1f3864', extBdr:'#b8cce4', // phát sinh: xanh nhạt
+  profBg:'#fce4d6', profFg:'#833c00',            // lợi nhuận/còn nợ: be cam nhạt
+  sumBg:'#4472c4',                               // tổng chi phí: xanh dương
+  infoBg:'#dae3f3', infoFg:'#1f3864',            // KPI row: xanh nhạt
+  alt:'#dae3f3',                                 // hàng xen kẽ: xanh nhạt
+  bdr:'#b8cce4',    bdrMed:'#2e75b6'             // border
 };
 
 // Helper: getRangeList từ danh sách row numbers
@@ -3199,7 +3199,7 @@ function writeSheet(sh, sd) {
   var mc = maxCols;
   if(b.navy.length)       { rnList(sh,b.navy,1,mc).setBackground(CLR.navyBg).setFontColor(CLR.navyFg).setFontWeight('bold').setHorizontalAlignment('center').setFontSize(isProj?14:13); bdrBatch(sh,b.navy,1,mc,false,'#040f1a',BS.SOLID_MEDIUM); }
   if(b.info.length)       { rnList(sh,b.info,1,mc).setBackground(CLR.infoBg).setFontColor(CLR.infoFg).setFontWeight('bold').setFontSize(11).setHorizontalAlignment('center').setWrap(false); bdrBatch(sh,b.info,1,mc,false,'#1565c0',BS.SOLID_MEDIUM); }
-  if(b.subSec.length)     { rnList(sh,b.subSec,1,mc).setBackground('#004d40').setFontColor('#ffffff').setFontWeight('bold').setFontSize(10).setHorizontalAlignment('left'); bdrBatch(sh,b.subSec,1,mc,false,'#00332b',BS.SOLID); }
+  if(b.subSec.length)     { rnList(sh,b.subSec,1,mc).setBackground('#4472c4').setFontColor('#ffffff').setFontWeight('bold').setFontSize(10).setHorizontalAlignment('left'); bdrBatch(sh,b.subSec,1,mc,false,'#2e75b6',BS.SOLID); }
   if(b.colHdr.length)     { rnList(sh,b.colHdr,1,mc).setBackground(CLR.colHdrBg).setFontColor(CLR.colHdrFg).setFontWeight('bold').setFontSize(10).setHorizontalAlignment('center').setWrap(true); bdrBatch(sh,b.colHdr,1,mc,true,'#004d40',BS.SOLID_MEDIUM); }
   if(b.secHdr.length)     { rnList(sh,b.secHdr,1,mc).setBackground(CLR.secBg).setFontColor(CLR.secFg).setFontWeight('bold').setFontSize(11).setHorizontalAlignment('left'); bdrBatch(sh,b.secHdr,1,mc,false,'#0d47a1',BS.SOLID_MEDIUM); }
   if(b.wkHdr.length)      { rnList(sh,b.wkHdr,1,mc).setBackground(CLR.wkBg).setFontColor(CLR.wkFg).setFontWeight('bold').setFontSize(11).setHorizontalAlignment('left'); bdrBatch(sh,b.wkHdr,1,mc,false,'#01579b',BS.SOLID_MEDIUM); }
