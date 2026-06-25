@@ -2803,6 +2803,7 @@ function buildSheetsPayload() {
         const lc   = laborCost(p), mc=materialCost(p), cc=contractorCost(p), oc=otherCost(p);
         const tc   = lc+mc+cc+oc, adv=totalAdvances(p);
         const status = p.status==='active'?'Đang thi công':'Hoàn thành';
+        const statusEmoji = p.status==='active'?'🔨':'✅';
 
         // Tất cả tuần có dữ liệu
         const wsSet = new Set([
@@ -2816,16 +2817,58 @@ function buildSheetsPayload() {
         const rows = [];
         const PR   = 11;
         const pad  = arr => { const r=[...arr]; while(r.length<PR) r.push(''); return r; };
-        // mRow: cột A rỗng, cột B = nhãn, cột C = giá trị
         const mRow = (lbl, val) => pad(['', lbl||'', val??'']);
+        const fmtK = n => Math.round(n||0).toLocaleString('vi-VN');
 
-        // ── Tiêu đề
-        rows.push([`CÔNG TRÌNH: ${p.name||''}`]);
-        rows.push(['Trạng thái', status, 'Từ ngày', p.startDate||'', p.endDate?`→ ${p.endDate}`:'-']);
+        const bal  = adv - tc;
+        const exps = [...(p.expenses||[])].sort((a,b)=>(a.date||'')>(b.date||'')?1:(a.date||'')<(b.date||'')?-1:0);
+        const advs = [...(p.advances||[])].sort((a,b)=>a.date>b.date?1:-1);
+
+        // ── Tiêu đề + KPI strip
+        const dateStr = p.startDate ? `Bắt đầu: ${p.startDate}${p.endDate?' → '+p.endDate:''}` : '';
+        rows.push([`CÔNG TRÌNH: ${p.name||''}  |  ${statusEmoji} ${status}${dateStr?'  |  '+dateStr:''}`]);
+        const balKpi = bal >= 0 ? `Lợi nhuận: +${fmtK(bal)} đ` : `Còn nợ: -${fmtK(-bal)} đ`;
+        rows.push([`Tổng thu: ${fmtK(adv)} đ  |  Nhân công: ${fmtK(lc)} đ  |  Chi phí: ${fmtK(mc+cc+oc)} đ  |  ${balKpi}`]);
         rows.push([]);
 
-        // ── Chấm công theo tuần
-        rows.push(['CHẤM CÔNG THEO TUẦN']);
+        // ── C. Tổng quan tài chính
+        rows.push(['C.  TỔNG QUAN TÀI CHÍNH']);
+        rows.push(pad(['▶ THU']));
+        rows.push(mRow('Tạm ứng chủ nhà', adv));
+        rows.push(pad(['▶ CHI']));
+        rows.push(mRow('Nhân công', lc));
+        if(cc) rows.push(mRow('Đội thi công', cc));
+        if(mc) rows.push(mRow('Chi vật tư', mc));
+        if(oc) rows.push(mRow('CP tại công trình', oc));
+        rows.push(mRow(bal >= 0 ? 'Lợi nhuận ✅' : 'Công ty còn nợ', bal));
+        rows.push([]);
+
+        // ── D. Tạm ứng chủ nhà
+        rows.push(['D.  TẠM ỨNG CHỦ NHÀ']);
+        if(!advs.length) {
+            rows.push(pad(['(Chưa có tạm ứng)']));
+        } else {
+            rows.push(pad(['Ngày', 'Ghi Chú', 'Số Tiền']));
+            advs.forEach(a => rows.push(pad([df(a.date)||'', a.note||'', a.amount||0])));
+            rows.push(mRow('Tổng tạm ứng', adv));
+        }
+        rows.push([]);
+
+        // ── B. Chi phí chi tiết
+        rows.push(['B.  CHI PHÍ CHI TIẾT']);
+        if(!exps.length) {
+            rows.push(pad(['(Chưa có chi phí)']));
+        } else {
+            rows.push(pad(['Ngày', 'Mô Tả Chi Phí', 'Số Tiền', 'Người Chi', 'Loại']));
+            exps.forEach(e => {
+                rows.push(pad([df(e.date)||'', e.desc||'', e.amount||0, e.payer||'', expLabel(e.type)]));
+            });
+            rows.push(mRow('Tổng chi phí', mc+cc+oc));
+        }
+        rows.push([]);
+
+        // ── A. Chấm công theo tuần
+        rows.push(['A.  CHẤM CÔNG THEO TUẦN']);
         rows.push([]);
         if(!weeks.length) {
             rows.push(['(Chưa có dữ liệu chấm công)']);
@@ -2885,44 +2928,6 @@ function buildSheetsPayload() {
                 rows.push(['TỔNG TUẦN', ...blank7(), '', '', fmt(wkTotal)]);
                 rows.push([]);
             });
-        }
-
-        // ── B. Chi phí chi tiết — sắp xếp theo ngày
-        const exps = [...(p.expenses||[])].sort((a,b)=>(a.date||'')>(b.date||'')?1:(a.date||'')<(b.date||'')?-1:0);
-        rows.push(['B.  CHI PHÍ CHI TIẾT']);
-        if(!exps.length) {
-            rows.push(pad(['(Chưa có chi phí)']));
-        } else {
-            rows.push(pad(['Ngày', 'Mô Tả Chi Phí', 'Số Tiền', 'Người Chi', 'Loại']));
-            exps.forEach(e => {
-                rows.push(pad([e.date||'', e.desc||'', e.amount||0, e.payer||'', expLabel(e.type)]));
-            });
-            rows.push(mRow('Tổng chi phí', mc+cc+oc));
-        }
-        rows.push([]);
-
-        // ── C. Tổng quan tài chính
-        const bal = adv - tc;
-        rows.push(['C.  TỔNG QUAN TÀI CHÍNH']);
-        rows.push(pad(['▶ THU']));
-        rows.push(mRow('Tạm ứng chủ nhà', adv));
-        rows.push(pad(['▶ CHI']));
-        rows.push(mRow('Nhân công', lc));
-        if(cc) rows.push(mRow('Đội thi công', cc));
-        if(mc) rows.push(mRow('Chi vật tư', mc));
-        if(oc) rows.push(mRow('CP tại công trình', oc));
-        rows.push(mRow(bal >= 0 ? 'Lợi nhuận ✅' : 'Công ty còn nợ', bal));
-        rows.push([]);
-
-        // ── D. Tạm ứng chủ nhà
-        const advs = [...(p.advances||[])].sort((a,b)=>a.date>b.date?1:-1);
-        rows.push(['D.  TẠM ỨNG CHỦ NHÀ']);
-        if(!advs.length) {
-            rows.push(pad(['(Chưa có tạm ứng)']));
-        } else {
-            rows.push(pad(['Ngày', 'Ghi Chú', 'Số Tiền']));
-            advs.forEach(a => rows.push(pad([a.date||'', a.note||'', a.amount||0])));
-            rows.push(mRow('Tổng tạm ứng', adv));
         }
 
         return { name:(p.name||'CT').slice(0,31), type:'project', rows };
@@ -3087,7 +3092,7 @@ function writeSheet(sh, sd) {
   var b = { navy:[], info:[], colHdr:[], secHdr:[], wkHdr:[],
             totLbl:[], totVal:[], extLbl:[], extVal:[],
             sumRow:[], profRow:[], finRow:[], finSub:[],
-            expTypeHdr:[], alt:[], norm:[], blank:[] };
+            subSec:[], expTypeHdr:[], alt:[], norm:[], blank:[] };
   var merges=[], heights={}, numCells=[], ctrCells=[], altRow=false;
 
   rows.forEach(function(row, i) {
@@ -3099,16 +3104,20 @@ function writeSheet(sh, sd) {
 
     if (rn===1) { b.navy.push(rn); merges.push([rn,1,maxCols]); heights[rn]=isProj?44:38; return; }
     if (rn===2) {
-      if (isProj){ b.info.push(rn); heights[rn]=28; }
+      if (isProj){ b.info.push(rn); merges.push([rn,1,maxCols]); heights[rn]=40; }
       else       { b.colHdr.push(rn); heights[rn]=34; }
       return;
     }
     if (SECS.some(function(s){ return c0.indexOf(s)>=0; })) { b.secHdr.push(rn); merges.push([rn,1,maxCols]); heights[rn]=30; altRow=false; return; }
     if (c0.indexOf('Tuần:')===0) { b.wkHdr.push(rn); merges.push([rn,1,maxCols]); heights[rn]=28; altRow=false; return; }
 
-    // Expense type group headers (emoji-prefixed: 👷 🏗 🧱)
+    // Sub-section headers: ▶ THU, ▶ CHI (U+25B6)
+    if (c0.charCodeAt(0) === 0x25B6 && isProj) {
+      b.subSec.push(rn); merges.push([rn,1,maxCols]); heights[rn]=22; altRow=false; return;
+    }
+    // Expense type group headers (emoji-prefixed: 👷 🏗 🧱) — chỉ match emoji thực (>= U+1F000)
     var cp0 = c0.codePointAt ? c0.codePointAt(0) : c0.charCodeAt(0);
-    if (cp0 > 0x2000 && isProj) {
+    if (cp0 >= 0x1F000 && isProj) {
       b.expTypeHdr.push(rn); merges.push([rn,1,maxCols]); heights[rn]=24; altRow=false; return;
     }
 
@@ -3173,7 +3182,7 @@ function writeSheet(sh, sd) {
     }
     // Gộp cột rỗng ở đuôi — chỉ áp dụng cho hàng tài chính (cột A là ngày hoặc rỗng)
     // KHÔNG áp dụng cho hàng chấm công (cột A là tên thợ)
-    var isFinRow = (c0==='' || /^\d{2}\/\d{2}\/\d{4}$/.test(c0) || /^\d{4}-\d{2}-\d{2}$/.test(c0));
+    var isFinRow = (c0==='' || (c0.length===10 && c0.charAt(2)==='/' && c0.charAt(5)==='/') || (c0.length===10 && c0.charAt(4)==='-' && c0.charAt(7)==='-'));
     if (isProj && isFinRow && maxCols>=5 && Array.isArray(row) && row.length>=maxCols) {
       var tS=-1;
       for(var k=maxCols-2;k>=3;k--){
@@ -3189,7 +3198,8 @@ function writeSheet(sh, sd) {
 
   var mc = maxCols;
   if(b.navy.length)       { rnList(sh,b.navy,1,mc).setBackground(CLR.navyBg).setFontColor(CLR.navyFg).setFontWeight('bold').setHorizontalAlignment('center').setFontSize(isProj?14:13); bdrBatch(sh,b.navy,1,mc,false,'#040f1a',BS.SOLID_MEDIUM); }
-  if(b.info.length)       { rnList(sh,b.info,1,mc).setBackground(CLR.infoBg).setFontColor(CLR.infoFg).setFontStyle('italic').setWrap(true); bdrBatch(sh,b.info,1,mc,true,'#64b5f6',BS.SOLID); }
+  if(b.info.length)       { rnList(sh,b.info,1,mc).setBackground(CLR.infoBg).setFontColor(CLR.infoFg).setFontWeight('bold').setFontSize(11).setHorizontalAlignment('center').setWrap(false); bdrBatch(sh,b.info,1,mc,false,'#1565c0',BS.SOLID_MEDIUM); }
+  if(b.subSec.length)     { rnList(sh,b.subSec,1,mc).setBackground('#004d40').setFontColor('#ffffff').setFontWeight('bold').setFontSize(10).setHorizontalAlignment('left'); bdrBatch(sh,b.subSec,1,mc,false,'#00332b',BS.SOLID); }
   if(b.colHdr.length)     { rnList(sh,b.colHdr,1,mc).setBackground(CLR.colHdrBg).setFontColor(CLR.colHdrFg).setFontWeight('bold').setFontSize(10).setHorizontalAlignment('center').setWrap(true); bdrBatch(sh,b.colHdr,1,mc,true,'#004d40',BS.SOLID_MEDIUM); }
   if(b.secHdr.length)     { rnList(sh,b.secHdr,1,mc).setBackground(CLR.secBg).setFontColor(CLR.secFg).setFontWeight('bold').setFontSize(11).setHorizontalAlignment('left'); bdrBatch(sh,b.secHdr,1,mc,false,'#0d47a1',BS.SOLID_MEDIUM); }
   if(b.wkHdr.length)      { rnList(sh,b.wkHdr,1,mc).setBackground(CLR.wkBg).setFontColor(CLR.wkFg).setFontWeight('bold').setFontSize(11).setHorizontalAlignment('left'); bdrBatch(sh,b.wkHdr,1,mc,false,'#01579b',BS.SOLID_MEDIUM); }
@@ -3237,7 +3247,7 @@ function writeSheet(sh, sd) {
   // Wrap toàn bộ để không bị mất chữ
   sh.getRange(1,1,norm.length,maxCols).setWrap(true);
 
-  sh.setFrozenRows(2);
+  sh.setFrozenRows(isProj ? 1 : 2);
   if(isProj){ try{ sh.setFrozenColumns(1); }catch(fe){} }
 }
 
