@@ -804,6 +804,8 @@ function initFirebase(cfg) {
         fbRef.on('value', snap => {
             const d = snap.val();
             if (!d) return;
+            // Bỏ qua echo từ lần save của chính thiết bị này (trong vòng 3 giây)
+            if (Date.now() - _fbOwnSaveTs < 3000) return;
             S.workers  = d.workers  || [];
             S.projects = d.projects || [];
             localStorage.setItem('ct_v5', JSON.stringify({ workers: S.workers, projects: S.projects }));
@@ -853,6 +855,7 @@ function load() {
 function save() {
     localStorage.setItem('ct_v5', JSON.stringify({ workers: S.workers, projects: S.projects }));
     if (fbRef) {
+        _fbOwnSaveTs = Date.now();
         fbRef.set({ workers: S.workers, projects: S.projects })
              .catch(e => console.error('Firebase save:', e));
     }
@@ -861,6 +864,7 @@ function save() {
 
 // Debounce: chờ 10 giây sau lần save cuối rồi mới sync lên Sheets
 let _sheetsSyncTimer = null;
+let _fbOwnSaveTs = 0; // timestamp lần save cuối từ thiết bị này
 function scheduleSheetsSync() {
     if (!getSheetsUrl()) return;
     clearTimeout(_sheetsSyncTimer);
@@ -1730,7 +1734,7 @@ function renderAttendance(p) {
                             style="background:none;border:none;color:var(--gray-300);cursor:pointer;font-size:15px;line-height:1;padding:0 2px;flex-shrink:0;"
                             onmouseover="this.style.color='var(--danger)'" onmouseout="this.style.color='var(--gray-300)'">×</button>`:''}
                     </div>
-                    <div class="fs11 c-gray">${esc(w.role||'')} · ${fmtMoney(effectiveWage(w,toYMD(days[0])))}/N</div>
+                    <div class="fs11 c-gray">${esc(w.role||'')} · ${fmtMoney(effectiveWage(w,toYMD(days[6])))}/N</div>
                 </td>
                 ${days.map((d,i) => {
                     const ds    = toYMD(d);
@@ -2087,6 +2091,73 @@ function renderOverview(p) {
             </tr></tfoot>
         </table>
     </div>`;
+    })()}
+    ${(()=>{
+        const sd = projWeekStartDay(p);
+        const toWs = dateStr => toYMD(getWeekStartDate(new Date(dateStr+'T00:00:00'), sd));
+        const wsSet = new Set([
+            ...(p.attendance||[]).map(a => toWs(a.date)),
+            ...(p.weekExtras||[]).map(e => e.weekStart),
+            ...(p.workerSupport||[]).map(s => s.weekStart),
+            ...(p.weeklyExtraWorkers||[]).map(e => e.weekStart),
+            ...(p.workerAdvances||[]).map(a => a.weekStart),
+            ...(p.advances||[]).filter(a=>a.date).map(a => toWs(a.date)),
+            ...(p.expenses||[]).filter(e=>e.date).map(e => toWs(e.date)),
+        ]);
+        const weeks = [...wsSet].filter(Boolean).sort();
+        if (!weeks.length) return '';
+        const dfs = s => { const d=new Date(s+'T00:00:00'); return `${d.getDate()}/${d.getMonth()+1}`; };
+        let gAdv=0, gLabor=0, gWAdv=0, gExp=0;
+        const rows = weeks.map(ws => {
+            const wsDt = new Date(ws+'T00:00:00');
+            const days = weekDays(wsDt);
+            const we   = toYMD(days[6]);
+            const regW = projWorkersForWeek(p, ws);
+            const laborWk  = regW.reduce((s,w)=>s+weekLaborWorker(p,w,days)+getWorkerSupport(p,w.id,ws),0)
+                           + weekDailyExtras(p,days) + weekExtrasCost(p,ws);
+            const wAdvWk   = (p.workerAdvances||[]).filter(a=>a.weekStart===ws).reduce((s,a)=>s+(a.amount||0),0);
+            const advWk    = (p.advances||[]).filter(a=>a.date&&toWs(a.date)===ws).reduce((s,a)=>s+(a.amount||0),0);
+            const expWk    = (p.expenses||[]).filter(e=>e.date&&toWs(e.date)===ws).reduce((s,e)=>s+(e.amount||0),0);
+            gAdv+=advWk; gLabor+=laborWk; gWAdv+=wAdvWk; gExp+=expWk;
+            const chi = laborWk+wAdvWk+expWk;
+            const bal = advWk-chi;
+            const showBal = advWk||chi;
+            return `<tr>
+                <td class="fs12" style="white-space:nowrap;">${dfs(ws)} – ${dfs(we)}</td>
+                <td class="tr fs12 fw6" style="color:var(--success);">${advWk?fmtMoney(advWk):'-'}</td>
+                <td class="tr fs12">${laborWk?fmtMoney(laborWk):'-'}</td>
+                <td class="tr fs12" style="color:var(--danger);">${wAdvWk?fmtMoney(wAdvWk):'-'}</td>
+                <td class="tr fs12">${expWk?fmtMoney(expWk):'-'}</td>
+                <td class="tr fs12 fw6" style="color:${showBal?(bal>=0?'var(--success)':'var(--danger)'):'var(--gray-300)'};">${showBal?(bal>=0?'+':'')+fmtMoney(bal):'-'}</td>
+            </tr>`;
+        });
+        const totalChi = gLabor+gWAdv+gExp;
+        const totalBal = gAdv-totalChi;
+        return `
+    <div class="card" style="margin-top:0;">
+        <div class="card-header"><span class="card-title">💰 Đối chiếu thu chi theo tuần</span></div>
+        <div style="overflow-x:auto;">
+        <table class="data-table" style="min-width:520px;">
+            <thead><tr>
+                <th>Tuần</th>
+                <th class="tr" style="color:var(--success);">Tạm ứng (thu)</th>
+                <th class="tr">Nhân công</th>
+                <th class="tr" style="color:var(--danger);">Ứng thợ</th>
+                <th class="tr">Chi phí</th>
+                <th class="tr">Cân đối</th>
+            </tr></thead>
+            <tbody>${rows.join('')}</tbody>
+            <tfoot><tr>
+                <td class="fw7">Tổng</td>
+                <td class="tr fw7" style="color:var(--success);">${fmtMoney(gAdv)}</td>
+                <td class="tr fw7">${fmtMoney(gLabor)}</td>
+                <td class="tr fw7" style="color:var(--danger);">${gWAdv?fmtMoney(gWAdv):'-'}</td>
+                <td class="tr fw7">${gExp?fmtMoney(gExp):'-'}</td>
+                <td class="tr fw7" style="color:${totalBal>=0?'var(--success)':'var(--danger)'};">${totalBal>=0?'+':''}${fmtMoney(totalBal)}</td>
+            </tr></tfoot>
+        </table>
+        </div>
+    </div>`;
     })()}`;
 }
 
@@ -2346,6 +2417,10 @@ function mEditWorker() {
                 ${h.note?`<span class="c-gray"> · ${esc(h.note)}</span>`:''}
                 ${i===0?`<span class="tag tag-current" style="margin-left:4px;">Hiện tại</span>`:''}
             </div>
+            ${history.length>1?`<button onclick="deleteWageHistory('${w.id}','${h.id}')"
+                style="background:none;border:none;color:var(--gray-300);cursor:pointer;font-size:17px;line-height:1;padding:2px 6px;flex-shrink:0;"
+                onmouseover="this.style.color='var(--danger)'" onmouseout="this.style.color='var(--gray-300)'"
+                title="Xóa mức lương này">×</button>`:''}
         </div>`).join('')}
     </div>` : ''}
     <div class="modal-footer">
@@ -2396,6 +2471,17 @@ function doRaiseWage(wid) {
     w.wageHistory.push({ id: uid(), wage, from, note: $v('m-note').trim() });
     w.wage = wage;
     save(); closeModal(); renderAll();
+}
+
+function deleteWageHistory(wid, hid) {
+    const w = S.workers.find(x=>x.id===wid);
+    if (!w || !w.wageHistory) return;
+    if (w.wageHistory.length <= 1) { alert('Không thể xóa mức lương duy nhất'); return; }
+    w.wageHistory = w.wageHistory.filter(h => h.id !== hid);
+    const sorted = [...w.wageHistory].sort((a,b) => b.from.localeCompare(a.from));
+    w.wage = sorted[0].wage;
+    save(); renderAll();
+    openModal('edit-worker', wid);
 }
 
 // ── Assign workers to project ─────────────────────────────
