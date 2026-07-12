@@ -2107,8 +2107,9 @@ function renderOverview(p) {
         const weeks = [...wsSet].filter(Boolean).sort();
         if (!weeks.length) return '';
         const dfs = s => { const d=new Date(s+'T00:00:00'); return `${d.getDate()}/${d.getMonth()+1}`; };
-        let gAdv=0, gLabor=0, gWAdv=0, gExp=0;
-        const rows = weeks.map(ws => {
+        let gAdv=0, gLabor=0, gWAdv=0, gOther=0, gMat=0, gCtor=0;
+        const NC = 8; // total columns
+        const rows = weeks.flatMap(ws => {
             const wsDt = new Date(ws+'T00:00:00');
             const days = weekDays(wsDt);
             const we   = toYMD(days[6]);
@@ -2117,42 +2118,64 @@ function renderOverview(p) {
                            + weekDailyExtras(p,days) + weekExtrasCost(p,ws);
             const wAdvWk   = (p.workerAdvances||[]).filter(a=>a.weekStart===ws).reduce((s,a)=>s+(a.amount||0),0);
             const advWk    = (p.advances||[]).filter(a=>a.date&&toWs(a.date)===ws).reduce((s,a)=>s+(a.amount||0),0);
-            const expWk    = (p.expenses||[]).filter(e=>e.date&&toWs(e.date)===ws).reduce((s,e)=>s+(e.amount||0),0);
-            gAdv+=advWk; gLabor+=laborWk; gWAdv+=wAdvWk; gExp+=expWk;
-            const chi = laborWk+wAdvWk+expWk;
+            const wkExps   = (p.expenses||[]).filter(e=>e.date&&toWs(e.date)===ws);
+            const otherWk  = wkExps.filter(e=>e.type==='other').reduce((s,e)=>s+(e.amount||0),0);
+            const matWk    = wkExps.filter(e=>e.type==='material').reduce((s,e)=>s+(e.amount||0),0);
+            const ctorItems= wkExps.filter(e=>e.type==='contractor');
+            const ctorWk   = ctorItems.reduce((s,e)=>s+(e.amount||0),0);
+            gAdv+=advWk; gLabor+=laborWk; gWAdv+=wAdvWk; gOther+=otherWk; gMat+=matWk; gCtor+=ctorWk;
+            const chi = laborWk+wAdvWk+otherWk+matWk+ctorWk;
             const bal = advWk-chi;
             const showBal = advWk||chi;
-            return `<tr>
-                <td class="fs12" style="white-space:nowrap;">${dfs(ws)} – ${dfs(we)}</td>
+            const mainRow = `<tr>
+                <td class="fs12" style="white-space:nowrap;font-weight:600;">${dfs(ws)} – ${dfs(we)}</td>
                 <td class="tr fs12 fw6" style="color:var(--success);">${advWk?fmtMoney(advWk):'-'}</td>
                 <td class="tr fs12">${laborWk?fmtMoney(laborWk):'-'}</td>
                 <td class="tr fs12" style="color:var(--danger);">${wAdvWk?fmtMoney(wAdvWk):'-'}</td>
-                <td class="tr fs12">${expWk?fmtMoney(expWk):'-'}</td>
+                <td class="tr fs12">${otherWk?fmtMoney(otherWk):'-'}</td>
+                <td class="tr fs12">${matWk?fmtMoney(matWk):'-'}</td>
+                <td class="tr fs12">${ctorWk?fmtMoney(ctorWk):'-'}</td>
                 <td class="tr fs12 fw6" style="color:${showBal?(bal>=0?'var(--success)':'var(--danger)'):'var(--gray-300)'};">${showBal?(bal>=0?'+':'')+fmtMoney(bal):'-'}</td>
             </tr>`;
+            const subRows = ctorItems.map(e=>`<tr style="background:var(--gray-50,#f9fafb);">
+                <td colspan="6" style="padding:2px 8px 2px 20px;font-size:11px;color:var(--gray-500);">↳ ${esc(e.note||'Đội thi công')}${e.date?' ('+fmtDate(e.date)+')':''}</td>
+                <td class="tr" style="font-size:11px;color:var(--gray-600);padding-right:8px;">${fmtMoney(e.amount||0)}</td>
+                <td></td>
+            </tr>`);
+            return [mainRow, ...subRows];
         });
-        const totalChi = gLabor+gWAdv+gExp;
+        const totalChi = gLabor+gWAdv+gOther+gMat+gCtor;
         const totalBal = gAdv-totalChi;
         return `
     <div class="card" style="margin-top:0;">
         <div class="card-header"><span class="card-title">💰 Đối chiếu thu chi theo tuần</span></div>
         <div style="overflow-x:auto;">
-        <table class="data-table" style="min-width:520px;">
-            <thead><tr>
-                <th>Tuần</th>
-                <th class="tr" style="color:var(--success);">Tạm ứng (thu)</th>
-                <th class="tr">Nhân công</th>
-                <th class="tr" style="color:var(--danger);">Ứng thợ</th>
-                <th class="tr">Chi phí</th>
-                <th class="tr">Cân đối</th>
-            </tr></thead>
+        <table class="data-table" style="min-width:700px;">
+            <thead>
+            <tr style="border-bottom:none;">
+                <th rowspan="2" style="vertical-align:bottom;">Tuần</th>
+                <th class="tr" style="color:var(--success);" rowspan="2">Tạm ứng<br><span style="font-weight:400;font-size:10px;">(thu)</span></th>
+                <th class="tr" colspan="2" style="border-bottom:1px solid var(--gray-200);text-align:center;font-size:11px;padding-bottom:2px;">Chi nhân công</th>
+                <th class="tr" colspan="3" style="border-bottom:1px solid var(--gray-200);text-align:center;font-size:11px;padding-bottom:2px;">Chi phí</th>
+                <th class="tr" rowspan="2">Cân đối</th>
+            </tr>
+            <tr>
+                <th class="tr" style="font-size:11px;font-weight:600;">Nhân công</th>
+                <th class="tr" style="font-size:11px;font-weight:600;color:var(--danger);">Ứng thợ</th>
+                <th class="tr" style="font-size:11px;font-weight:600;">Tại CT</th>
+                <th class="tr" style="font-size:11px;font-weight:600;">Vật tư</th>
+                <th class="tr" style="font-size:11px;font-weight:600;">Đội TC</th>
+            </tr>
+            </thead>
             <tbody>${rows.join('')}</tbody>
             <tfoot><tr>
                 <td class="fw7">Tổng</td>
                 <td class="tr fw7" style="color:var(--success);">${fmtMoney(gAdv)}</td>
                 <td class="tr fw7">${fmtMoney(gLabor)}</td>
                 <td class="tr fw7" style="color:var(--danger);">${gWAdv?fmtMoney(gWAdv):'-'}</td>
-                <td class="tr fw7">${gExp?fmtMoney(gExp):'-'}</td>
+                <td class="tr fw7">${gOther?fmtMoney(gOther):'-'}</td>
+                <td class="tr fw7">${gMat?fmtMoney(gMat):'-'}</td>
+                <td class="tr fw7">${gCtor?fmtMoney(gCtor):'-'}</td>
                 <td class="tr fw7" style="color:${totalBal>=0?'var(--success)':'var(--danger)'};">${totalBal>=0?'+':''}${fmtMoney(totalBal)}</td>
             </tr></tfoot>
         </table>
