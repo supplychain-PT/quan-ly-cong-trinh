@@ -2127,56 +2127,58 @@ function renderOverview(p) {
             const chi = laborWk+wAdvWk+otherWk+matWk+ctorWk;
             const bal = advWk-chi;
             const showBal = advWk||chi;
+            const C = 'border:1px solid var(--gray-200);padding:6px 10px;text-align:center;';
             const mainRow = `<tr>
-                <td class="fs12" style="white-space:nowrap;font-weight:600;">${dfs(ws)} – ${dfs(we)}</td>
-                <td class="tr fs12 fw6" style="color:var(--success);">${advWk?fmtMoney(advWk):'-'}</td>
-                <td class="tr fs12">${laborWk?fmtMoney(laborWk):'-'}</td>
-                <td class="tr fs12" style="color:var(--danger);">${wAdvWk?fmtMoney(wAdvWk):'-'}</td>
-                <td class="tr fs12">${otherWk?fmtMoney(otherWk):'-'}</td>
-                <td class="tr fs12">${matWk?fmtMoney(matWk):'-'}</td>
-                <td class="tr fs12">${ctorWk?fmtMoney(ctorWk):'-'}</td>
-                <td class="tr fs12 fw6" style="color:${showBal?(bal>=0?'var(--success)':'var(--danger)'):'var(--gray-300)'};">${showBal?(bal>=0?'+':'')+fmtMoney(bal):'-'}</td>
+                <td style="${C}white-space:nowrap;font-weight:600;font-size:12px;text-align:left;">${dfs(ws)} – ${dfs(we)}</td>
+                <td style="${C}font-weight:700;color:var(--success);font-size:12px;">${advWk?fmtMoney(advWk):'-'}</td>
+                <td style="${C}font-size:12px;">${laborWk?fmtMoney(laborWk):'-'}</td>
+                <td style="${C}font-size:12px;color:${wAdvWk?'var(--danger)':'inherit'};">${wAdvWk?fmtMoney(wAdvWk):'-'}</td>
+                <td style="${C}font-size:12px;">${otherWk?fmtMoney(otherWk):'-'}</td>
+                <td style="${C}font-size:12px;">${matWk?fmtMoney(matWk):'-'}</td>
+                <td style="${C}font-size:12px;">${ctorWk?fmtMoney(ctorWk):'-'}</td>
+                <td style="${C}font-weight:700;font-size:12px;color:${showBal?(bal>=0?'var(--success)':'var(--danger)'):'var(--gray-300)'};">${showBal?(bal>=0?'+':'')+fmtMoney(bal):'-'}</td>
             </tr>`;
             const subRows = ctorItems.map(e=>`<tr style="background:var(--gray-50,#f9fafb);">
-                <td colspan="6" style="padding:2px 8px 2px 20px;font-size:11px;color:var(--gray-500);">↳ ${esc(e.note||'Đội thi công')}${e.date?' ('+fmtDate(e.date)+')':''}</td>
-                <td class="tr" style="font-size:11px;color:var(--gray-600);padding-right:8px;">${fmtMoney(e.amount||0)}</td>
-                <td></td>
+                <td colspan="6" style="border:1px solid var(--gray-200);padding:3px 8px 3px 20px;font-size:11px;color:var(--gray-500);text-align:left;">↳ ${esc(e.note||'Đội thi công')}${e.date?' ('+fmtDate(e.date)+')':''}</td>
+                <td style="border:1px solid var(--gray-200);padding:3px 10px;font-size:11px;color:var(--gray-600);text-align:center;">${fmtMoney(e.amount||0)}</td>
+                <td style="border:1px solid var(--gray-200);"></td>
             </tr>`);
             return [mainRow, ...subRows];
         });
         const totalChi = gLabor+gWAdv+gOther+gMat+gCtor;
         const totalBal = gAdv-totalChi;
+        const TH = 'border:1px solid var(--gray-300);padding:7px 10px;text-align:center;background:var(--gray-50,#f9fafb);font-size:12px;';
         return `
     <div class="card" style="margin-top:0;">
         <div class="card-header"><span class="card-title">💰 Đối chiếu thu chi theo tuần</span></div>
         <div style="overflow-x:auto;">
-        <table class="data-table" style="min-width:700px;">
+        <table style="min-width:700px;width:100%;border-collapse:collapse;">
             <thead>
-            <tr style="border-bottom:none;">
-                <th rowspan="2" style="vertical-align:bottom;">Tuần</th>
-                <th class="tr" style="color:var(--success);" rowspan="2">Tạm ứng<br><span style="font-weight:400;font-size:10px;">(thu)</span></th>
-                <th class="tr" colspan="2" style="border-bottom:1px solid var(--gray-200);text-align:center;font-size:11px;padding-bottom:2px;">Chi nhân công</th>
-                <th class="tr" colspan="3" style="border-bottom:1px solid var(--gray-200);text-align:center;font-size:11px;padding-bottom:2px;">Chi phí</th>
-                <th class="tr" rowspan="2">Cân đối</th>
+            <tr>
+                <th rowspan="2" style="${TH}text-align:left;vertical-align:middle;">Tuần</th>
+                <th rowspan="2" style="${TH}color:var(--success);vertical-align:middle;">Tạm ứng<br><span style="font-weight:400;font-size:10px;">(thu)</span></th>
+                <th colspan="2" style="${TH}border-bottom:none;">Chi nhân công</th>
+                <th colspan="3" style="${TH}border-bottom:none;">Chi phí</th>
+                <th rowspan="2" style="${TH}vertical-align:middle;">Cân đối</th>
             </tr>
             <tr>
-                <th class="tr" style="font-size:11px;font-weight:600;">Nhân công</th>
-                <th class="tr" style="font-size:11px;font-weight:600;color:var(--danger);">Ứng thợ</th>
-                <th class="tr" style="font-size:11px;font-weight:600;">Tại CT</th>
-                <th class="tr" style="font-size:11px;font-weight:600;">Vật tư</th>
-                <th class="tr" style="font-size:11px;font-weight:600;">Đội TC</th>
+                <th style="${TH}font-size:11px;">Nhân công</th>
+                <th style="${TH}font-size:11px;color:var(--danger);">Ứng thợ</th>
+                <th style="${TH}font-size:11px;">Tại CT</th>
+                <th style="${TH}font-size:11px;">Vật tư</th>
+                <th style="${TH}font-size:11px;">Đội TC</th>
             </tr>
             </thead>
             <tbody>${rows.join('')}</tbody>
-            <tfoot><tr>
-                <td class="fw7">Tổng</td>
-                <td class="tr fw7" style="color:var(--success);">${fmtMoney(gAdv)}</td>
-                <td class="tr fw7">${fmtMoney(gLabor)}</td>
-                <td class="tr fw7" style="color:var(--danger);">${gWAdv?fmtMoney(gWAdv):'-'}</td>
-                <td class="tr fw7">${gOther?fmtMoney(gOther):'-'}</td>
-                <td class="tr fw7">${gMat?fmtMoney(gMat):'-'}</td>
-                <td class="tr fw7">${gCtor?fmtMoney(gCtor):'-'}</td>
-                <td class="tr fw7" style="color:${totalBal>=0?'var(--success)':'var(--danger)'};">${totalBal>=0?'+':''}${fmtMoney(totalBal)}</td>
+            <tfoot><tr style="background:var(--gray-100,#f3f4f6);">
+                <td style="${TH}font-weight:700;text-align:left;">Tổng</td>
+                <td style="${TH}font-weight:700;color:var(--success);">${fmtMoney(gAdv)}</td>
+                <td style="${TH}font-weight:700;">${fmtMoney(gLabor)}</td>
+                <td style="${TH}font-weight:700;color:${gWAdv?'var(--danger)':'inherit'};">${gWAdv?fmtMoney(gWAdv):'-'}</td>
+                <td style="${TH}font-weight:700;">${gOther?fmtMoney(gOther):'-'}</td>
+                <td style="${TH}font-weight:700;">${gMat?fmtMoney(gMat):'-'}</td>
+                <td style="${TH}font-weight:700;">${gCtor?fmtMoney(gCtor):'-'}</td>
+                <td style="${TH}font-weight:700;color:${totalBal>=0?'var(--success)':'var(--danger)'};">${totalBal>=0?'+':''}${fmtMoney(totalBal)}</td>
             </tr></tfoot>
         </table>
         </div>
