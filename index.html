@@ -2121,6 +2121,7 @@ function renderOverview(p) {
             const wkExps   = (p.expenses||[]).filter(e=>e.date&&toWs(e.date)===ws);
             const otherWk  = wkExps.filter(e=>e.type==='other').reduce((s,e)=>s+(e.amount||0),0);
             const matWk    = wkExps.filter(e=>e.type==='material').reduce((s,e)=>s+(e.amount||0),0);
+            const matItems = wkExps.filter(e=>e.type==='material');
             const ctorItems= wkExps.filter(e=>e.type==='contractor');
             const ctorWk   = ctorItems.reduce((s,e)=>s+(e.amount||0),0);
             gAdv+=advWk; gLabor+=laborWk; gWAdv+=wAdvWk; gOther+=otherWk; gMat+=matWk; gCtor+=ctorWk;
@@ -2128,6 +2129,7 @@ function renderOverview(p) {
             const bal = advWk-chi;
             const showBal = advWk||chi;
             const C = 'border:1px solid var(--gray-200);padding:6px 10px;text-align:center;';
+            const SUB = `border:1px solid var(--gray-200);padding:3px 10px;font-size:11px;color:var(--gray-600);text-align:center;`;
             const mainRow = `<tr>
                 <td style="${C}white-space:nowrap;font-weight:600;font-size:12px;text-align:left;">${dfs(ws)} – ${dfs(we)}</td>
                 <td style="${C}font-weight:700;color:var(--success);font-size:12px;">${advWk?fmtMoney(advWk):'-'}</td>
@@ -2138,12 +2140,20 @@ function renderOverview(p) {
                 <td style="${C}font-size:12px;">${ctorWk?fmtMoney(ctorWk):'-'}</td>
                 <td style="${C}font-weight:700;font-size:12px;color:${showBal?(bal>=0?'var(--success)':'var(--danger)'):'var(--gray-300)'};">${showBal?(bal>=0?'+':'')+fmtMoney(bal):'-'}</td>
             </tr>`;
-            const subRows = ctorItems.map(e=>`<tr style="background:var(--gray-50,#f9fafb);">
-                <td colspan="6" style="border:1px solid var(--gray-200);padding:3px 8px 3px 20px;font-size:11px;color:var(--gray-500);text-align:left;">↳ ${esc(e.note||'Đội thi công')}${e.date?' ('+fmtDate(e.date)+')':''}</td>
-                <td style="border:1px solid var(--gray-200);padding:3px 10px;font-size:11px;color:var(--gray-600);text-align:center;">${fmtMoney(e.amount||0)}</td>
-                <td style="border:1px solid var(--gray-200);"></td>
+            const matSubRows = matItems.map(e=>`<tr style="background:var(--gray-50,#f9fafb);">
+                <td colspan="4" style="border:1px solid var(--gray-200);padding:3px 8px 3px 20px;font-size:11px;color:var(--gray-500);text-align:left;">↳ ${esc(e.note||'Vật tư')}${e.date?' ('+fmtDate(e.date)+')':''}</td>
+                <td style="${SUB}"></td>
+                <td style="${SUB}">${fmtMoney(e.amount||0)}</td>
+                <td style="${SUB}"></td>
+                <td style="${SUB}"></td>
             </tr>`);
-            return [mainRow, ...subRows];
+            const ctorSubRows = ctorItems.map(e=>`<tr style="background:var(--gray-50,#f9fafb);">
+                <td colspan="5" style="border:1px solid var(--gray-200);padding:3px 8px 3px 20px;font-size:11px;color:var(--gray-500);text-align:left;">↳ ${esc(e.note||'Đội thi công')}${e.date?' ('+fmtDate(e.date)+')':''}</td>
+                <td style="${SUB}"></td>
+                <td style="${SUB}">${fmtMoney(e.amount||0)}</td>
+                <td style="${SUB}"></td>
+            </tr>`);
+            return [mainRow, ...matSubRows, ...ctorSubRows];
         });
         const totalChi = gLabor+gWAdv+gOther+gMat+gCtor;
         const totalBal = gAdv-totalChi;
