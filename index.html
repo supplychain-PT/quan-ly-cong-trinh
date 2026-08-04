@@ -539,7 +539,7 @@
         <!-- Global views -->
         <div class="sidebar-views">
             <div class="view-item" id="vi-report" onclick="selectView('report')">
-                <span class="view-item-icon">📈</span> Báo cáo công trình
+                <span class="view-item-icon">📊</span> Tổng quan công trình
             </div>
 
             <div class="view-item" id="vi-summary" onclick="selectView('summary')">
@@ -1252,7 +1252,7 @@ function updateTopbar() {
     const TAB_LABEL = { attendance:'📋 Chấm công', expenses:'💰 Chi phí', advances:'💵 Tạm ứng', overview:'📊 Tổng quan', payments:'💵 Thanh toán' };
     if (S.view === 'workers')      { if(btn) btn.textContent='👷 Thợ';        if(title) title.textContent='👷 Danh sách thợ'; }
     else if (S.view === 'summary') { if(btn) btn.textContent='📊 Tổng lương'; if(title) title.textContent='📊 Tổng lương tuần'; }
-    else if (S.view === 'report')  { if(btn) btn.textContent='📈 Báo cáo';    if(title) title.textContent='📈 Báo cáo công trình'; }
+    else if (S.view === 'report')  { if(btn) btn.textContent='📊 Tổng quan';  if(title) title.textContent='📊 Tổng quan công trình'; }
     else if (S.view === 'floorplan') { if(btn) btn.textContent='🏠 Sơ đồ'; if(title) title.textContent='🏠 Sơ đồ nhà'; }
     else {
         const p = cur();
@@ -1478,7 +1478,7 @@ function renderReportView() {
     const from = S.reportFrom, to = S.reportTo;
 
     const projs = S.projects;
-    if (!projs.length) return `<div class="main-header"><div class="main-title">📈 Báo cáo công trình</div></div>
+    if (!projs.length) return `<div class="main-header"><div class="main-title">📊 Tổng quan công trình</div></div>
         <div class="tab-content"><div class="card"><div class="empty"><div class="empty-icon">📈</div>
         <div class="empty-desc">Chưa có công trình nào</div></div></div></div>`;
 
@@ -1597,7 +1597,7 @@ function renderReportView() {
 
     return `
     <div class="main-header">
-        <div><div class="main-title">📈 Báo cáo công trình</div>
+        <div><div class="main-title">📊 Tổng quan công trình</div>
         <div class="main-meta">${projs.length} công trình</div></div>
     </div>
     <div class="tab-content">${filterBar}${grandStats}${projCards}</div>`;
@@ -2002,7 +2002,7 @@ function renderOverview(p) {
             <div class="stat-value negative">${fmtMoney(tc)}</div>
         </div>
         <div class="stat-card">
-            <div class="stat-label">${pft>=0?'💰 Lợi nhuận':'📉 Thua lỗ'}</div>
+            <div class="stat-label">${pft>=0?'💰 Số dư':'📉 Thua lỗ'}</div>
             <div class="stat-value ${pft>=0?'positive':'negative'}">${pft<0?'-':''}${fmtMoney(Math.abs(pft))}</div>
             ${pct!==null?`<div class="fs11 c-gray" style="margin-top:3px;">${pct}% / tạm ứng</div>`:''}
         </div>
@@ -2022,7 +2022,7 @@ function renderOverview(p) {
                 <tr><td style="padding-left:12px;">Chi Vật Tư</td><td>${fmtMoney(mc)}</td></tr>
             </tbody>
             <tfoot><tr>
-                <td class="fw7" style="font-size:15px;">${pft>=0?'💰 Lợi nhuận':'📉 Lỗ'}</td>
+                <td class="fw7" style="font-size:15px;">${pft>=0?'💰 Số dư':'📉 Lỗ'}</td>
                 <td class="${pft>=0?'c-green':'c-red'}" style="font-size:16px;">${pft<0?'-':''}${fmtMoney(Math.abs(pft))}</td>
             </tr></tfoot></table>
         </div>
