@@ -1916,22 +1916,38 @@ function renderExpenses(p) {
             <span style="font-size:11px;font-weight:700;color:${m.clr};">${m.icon} ${m.label} · ${g.items.length} mục</span>
             <span style="font-size:11px;font-weight:700;color:${m.clr};">${fmtMoney(groupTotal)}</span>
         </div>
-        ${g.items.map(e=>`
-        <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--gray-100);">
-            <div style="flex:1;min-width:0;">
-                <div style="font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
-                    ${esc(e.desc||'–')}
-                </div>
-                <div class="fs11 c-gray">${fmtDate(e.date)}${e.payer?` · <span style="font-weight:600;color:var(--gray-600);">${esc(e.payer)}</span>`:''}</div>
+        ${(()=>{
+            // Group by date + payer
+            const dpGroups = [];
+            const dpMap = {};
+            g.items.forEach(e => {
+                const key = `${e.date}||${e.payer||''}`;
+                if (!dpMap[key]) { const grp={date:e.date,payer:e.payer||'',items:[]}; dpMap[key]=grp; dpGroups.push(grp); }
+                dpMap[key].items.push(e);
+            });
+            return dpGroups.map(grp => {
+                const grpTotal = grp.items.reduce((s,e)=>s+(e.amount||0),0);
+                return `
+        <div style="display:flex;align-items:center;gap:10px;padding:8px 14px;border-bottom:1px solid var(--gray-100);background:var(--gray-50,#f9fafb);">
+            <div style="flex:1;">
+                <span style="font-size:13px;font-weight:700;">${fmtDate(grp.date)}</span>
+                ${grp.payer?`<span style="font-size:12px;color:var(--gray-500);"> · <b>${esc(grp.payer)}</b></span>`:''}
             </div>
+            <div style="font-size:13px;font-weight:700;color:var(--danger);">${fmtMoney(grpTotal)}</div>
+        </div>
+        ${grp.items.map(e=>`
+        <div style="display:flex;align-items:center;gap:10px;padding:6px 14px 6px 28px;border-bottom:1px solid var(--gray-50,#f9fafb);">
+            <div style="flex:1;font-size:12px;color:var(--gray-600);">↳ ${esc(e.desc||'–')}</div>
             <div style="text-align:right;flex-shrink:0;">
-                <div style="font-size:14px;font-weight:700;color:var(--danger);">${fmtMoney(e.amount)}</div>
-                ${p.status==='active'?`<div style="margin-top:2px;">
+                <div style="font-size:13px;font-weight:600;color:var(--danger);">${fmtMoney(e.amount)}</div>
+                ${p.status==='active'?`<div style="margin-top:1px;">
                     <button class="btn btn-ghost btn-xs" onclick="editExpense('${p.id}','${e.id}')" style="padding:1px 4px;">✏️</button>
                     <button class="btn btn-ghost btn-xs" onclick="deleteExpense('${p.id}','${e.id}')" style="padding:1px 4px;">🗑️</button>
                 </div>`:''}
             </div>
         </div>`).join('')}`;
+            }).join('');
+        })()}`;
             }).join('')}
         <div style="padding:10px 14px;background:var(--gray-50);border-top:2px solid var(--gray-200);
                     display:flex;justify-content:space-between;font-weight:700;">
@@ -2555,59 +2571,103 @@ function doAssignWorkers() {
 }
 
 // ── Expense / Advance / Payment modals ────────────────────
+let _expItems = [{desc:'', amount:''}];
+
+function _syncExpItems() {
+    _expItems.forEach((_, i) => {
+        _expItems[i].desc   = document.getElementById(`m-desc-${i}`)?.value || '';
+        _expItems[i].amount = document.getElementById(`m-amt-${i}`)?.value  || '';
+    });
+}
+
+function _refreshExpRows() {
+    const c = document.getElementById('m-items-container');
+    if (!c) return;
+    c.innerHTML = _expItems.map((it, i) => `
+        <div style="display:flex;gap:6px;align-items:center;margin-bottom:6px;">
+            <input class="form-input" style="flex:1;font-size:13px;" placeholder="Nội dung chi..."
+                   id="m-desc-${i}" value="${esc(it.desc||'')}">
+            <input type="number" class="form-input" style="width:110px;font-size:13px;" placeholder="Số tiền"
+                   min="0" inputmode="numeric" id="m-amt-${i}" value="${it.amount||''}">
+            <button onclick="removeExpRow(${i})"
+                style="background:none;border:none;font-size:20px;cursor:pointer;padding:0 4px;line-height:1;flex-shrink:0;${_expItems.length<=1?'opacity:0.25;pointer-events:none;color:var(--gray-400)':'color:var(--gray-400)'}">×</button>
+        </div>`).join('');
+    if (_expItems.length > 1) {
+        const last = document.getElementById(`m-amt-${_expItems.length-1}`);
+        if (last) last.focus();
+    }
+}
+
+function addExpRow() {
+    _syncExpItems();
+    _expItems.push({desc:'', amount:''});
+    _refreshExpRows();
+}
+
+function removeExpRow(i) {
+    if (_expItems.length <= 1) return;
+    _syncExpItems();
+    _expItems.splice(i, 1);
+    _refreshExpRows();
+}
+
 function mAddExpense() {
+    _expItems = [{desc:'', amount:''}];
     return `<div class="modal-title">💰 Thêm chi phí</div>
-    <div class="form-group">
-        <label class="form-label">Ngày</label>
-        <input type="date" class="form-input" id="m-date" value="${todayYMD()}">
-    </div>
-    <div class="form-group">
-        <label class="form-label">Loại chi phí</label>
-        <select class="form-select" id="m-type">
-            <option value="contractor">👷 Đội Thi Công</option>
-            <option value="other">🏗️ CP Tại Công Trình</option>
-            <option value="material">🧱 Chi Vật Tư</option>
-        </select>
+    <div style="display:flex;gap:8px;">
+        <div class="form-group" style="flex:1;">
+            <label class="form-label">Ngày</label>
+            <input type="date" class="form-input" id="m-date" value="${todayYMD()}">
+        </div>
+        <div class="form-group" style="flex:1;">
+            <label class="form-label">Loại chi phí</label>
+            <select class="form-select" id="m-type">
+                <option value="contractor">👷 Đội TC</option>
+                <option value="other">🏗️ Tại CT</option>
+                <option value="material">🧱 Vật tư</option>
+            </select>
+        </div>
     </div>
     <div class="form-group">
         <label class="form-label">Người chi</label>
         <input class="form-input" id="m-payer" placeholder="Nguyên, Văn, chủ nhà...">
     </div>
     <div class="form-group">
-        <label class="form-label">Mô tả</label>
-        <input class="form-input" id="m-desc" placeholder="Xi măng, sắt, xăng xe...">
+        <label class="form-label" style="margin-bottom:6px;">Các khoản chi</label>
+        <div style="display:flex;gap:6px;margin-bottom:4px;">
+            <span style="flex:1;font-size:11px;color:var(--gray-400);">Nội dung</span>
+            <span style="width:110px;font-size:11px;color:var(--gray-400);">Số tiền (₫)</span>
+            <span style="width:28px;"></span>
+        </div>
+        <div id="m-items-container">
+            <div style="display:flex;gap:6px;align-items:center;margin-bottom:6px;">
+                <input class="form-input" style="flex:1;font-size:13px;" placeholder="Nội dung chi..." id="m-desc-0">
+                <input type="number" class="form-input" style="width:110px;font-size:13px;" placeholder="Số tiền"
+                       min="0" inputmode="numeric" id="m-amt-0">
+                <span style="width:28px;"></span>
+            </div>
+        </div>
+        <button onclick="addExpRow()" class="btn btn-outline btn-sm" style="width:100%;margin-top:2px;">+ Thêm khoản</button>
     </div>
-    <div class="form-group">
-        <label class="form-label">Số tiền (₫) *</label>
-        <input type="number" class="form-input" id="m-amount" placeholder="0" min="0" inputmode="numeric">
-    </div>
-    <div class="modal-footer" style="flex-wrap:wrap;gap:6px;">
+    <div class="modal-footer">
         <button class="btn btn-outline" onclick="closeModal()">Hủy</button>
-        <button class="btn btn-outline btn-primary" onclick="doAddExpense(true)">+ Thêm & tiếp</button>
-        <button class="btn btn-primary" onclick="doAddExpense()">+ Thêm</button>
+        <button class="btn btn-primary" onclick="doAddExpense()">💾 Lưu</button>
     </div>`;
 }
 
-function doAddExpense(keepOpen) {
-    const amount = $f('m-amount');
-    if (!amount) { alert('Nhập số tiền'); return; }
+function doAddExpense() {
     const date = $v('m-date'), type = $v('m-type'), payer = $v('m-payer').trim();
     if (!cur().expenses) cur().expenses = [];
-    cur().expenses.push({ id:uid(), date, type, desc:$v('m-desc').trim(), payer, amount });
-    save();
-    if (keepOpen) {
-        // Reopen with same date/type/payer, only clear desc & amount
-        const savedDate = date, savedType = type, savedPayer = payer;
-        openModal('add-expense');
-        document.getElementById('m-date').value  = savedDate;
-        document.getElementById('m-type').value  = savedType;
-        document.getElementById('m-payer').value = savedPayer;
-        document.getElementById('m-amount').value = '';
-        document.getElementById('m-desc').value  = '';
-        document.getElementById('m-amount').focus();
-    } else {
-        closeModal(); renderAll();
+    let added = 0;
+    for (let i = 0; i < _expItems.length; i++) {
+        const desc   = (document.getElementById(`m-desc-${i}`)?.value || '').trim();
+        const amount = parseFloat(document.getElementById(`m-amt-${i}`)?.value || '');
+        if (!amount || isNaN(amount)) continue;
+        cur().expenses.push({ id:uid(), date, type, desc, payer, amount });
+        added++;
     }
+    if (!added) { alert('Nhập ít nhất 1 khoản với số tiền'); return; }
+    save(); closeModal(); renderAll();
 }
 
 function editExpense(projId, expId) {
