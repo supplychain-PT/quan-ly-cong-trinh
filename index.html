@@ -804,8 +804,10 @@ function initFirebase(cfg) {
         fbRef.on('value', snap => {
             const d = snap.val();
             if (!d) return;
-            // Bỏ qua echo từ lần save của chính thiết bị này (trong vòng 3 giây)
-            if (Date.now() - _fbOwnSaveTs < 3000) return;
+            // Bỏ qua echo từ lần save của chính thiết bị này (trong vòng 5 giây)
+            if (Date.now() - _fbOwnSaveTs < 5000) return;
+            // Không làm gián đoạn người dùng đang nhập trong modal
+            if (document.getElementById('modal-overlay')?.style.display === 'flex') return;
             S.workers  = d.workers  || [];
             S.projects = d.projects || [];
             localStorage.setItem('ct_v5', JSON.stringify({ workers: S.workers, projects: S.projects }));
@@ -1963,7 +1965,7 @@ function renderAdvances(p) {
                 <td class="fs12 c-gray">${fmtDate(a.date)}</td>
                 <td style="font-size:13px;">${esc(a.note||`Đợt ${advs.length-i}`)}</td>
                 <td class="tr fw6 c-green fs12">${fmtMoney(a.amount)}</td>
-                <td>${p.status==='active'?`<button class="btn btn-ghost btn-xs" onclick="deleteAdvance('${p.id}','${a.id}')">🗑️</button>`:''}</td>
+                <td>${p.status==='active'?`<button class="btn btn-ghost btn-xs" onclick="openModal('edit-advance','${p.id}|${a.id}')">✏️</button><button class="btn btn-ghost btn-xs" onclick="deleteAdvance('${p.id}','${a.id}')">🗑️</button>`:''}</td>
             </tr>`).join('')}
             </tbody>
             <tfoot><tr>
@@ -2225,6 +2227,7 @@ function modalContent() {
         case 'add-expense':    return mAddExpense();
         case 'edit-expense':   return mEditExpense(modalExtra);
         case 'add-advance':    return mAddAdvance();
+        case 'edit-advance':   return mEditAdvance(modalExtra);
         case 'add-week-extra': return mAddWeekExtra();
         case 'set-revenue':    return mSetRevenue();
         case 'confirm':        return mConfirm();
@@ -2686,6 +2689,44 @@ function doAddAdvance() {
     if (!amount) { alert('Nhập số tiền'); return; }
     if (!cur().advances) cur().advances = [];
     cur().advances.push({ id:uid(), date:$v('m-date'), amount, note:$v('m-note').trim() });
+    save(); closeModal(); renderAll();
+}
+
+function mEditAdvance(arg) {
+    const [projId, advId] = (arg||'').split('|');
+    const p = S.projects.find(x=>x.id===projId);
+    const a = (p?.advances||[]).find(x=>x.id===advId);
+    if (!a) return '<div class="modal-title">Không tìm thấy</div>';
+    return `<div class="modal-title">✏️ Sửa tạm ứng</div>
+    <input type="hidden" id="m-proj-id" value="${esc(projId)}">
+    <input type="hidden" id="m-adv-id" value="${esc(advId)}">
+    <div class="form-group">
+        <label class="form-label">Ngày nhận tiền</label>
+        <input type="date" class="form-input" id="m-date" value="${a.date||''}">
+    </div>
+    <div class="form-group">
+        <label class="form-label">Số tiền (₫) *</label>
+        <input type="number" class="form-input" id="m-amount" placeholder="0" min="0" inputmode="numeric" value="${a.amount||''}">
+    </div>
+    <div class="form-group">
+        <label class="form-label">Ghi chú</label>
+        <input class="form-input" id="m-note" placeholder="Đợt 1, chuyển khoản..." value="${esc(a.note||'')}">
+    </div>
+    <div class="modal-footer">
+        <button class="btn btn-outline" onclick="closeModal()">Hủy</button>
+        <button class="btn btn-primary" onclick="doEditAdvance()">💾 Lưu</button>
+    </div>`;
+}
+
+function doEditAdvance() {
+    const amount = $f('m-amount');
+    if (!amount) { alert('Nhập số tiền'); return; }
+    const projId = $v('m-proj-id');
+    const advId  = $v('m-adv-id');
+    const p = S.projects.find(x=>x.id===projId);
+    const i = (p?.advances||[]).findIndex(x=>x.id===advId);
+    if (i < 0) return;
+    p.advances[i] = { ...p.advances[i], date:$v('m-date'), amount, note:$v('m-note').trim() };
     save(); closeModal(); renderAll();
 }
 
